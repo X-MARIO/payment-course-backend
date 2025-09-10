@@ -1,0 +1,73 @@
+# .github/workflows/ci.yml
+
+# Название рабочего процесса, которое будет отображаться в GitHub Actions
+name: NestJS CI Pipeline
+
+# Триггеры для запуска: push в main и pull request на main
+on:
+  push:
+    branches: ['main']
+  pull_request:
+    branches: ['main']
+
+jobs:
+  # Название задачи
+  build-and-test:
+    # Используем последнюю версию Ubuntu для запуска
+    runs-on: ubuntu-latest
+
+    # Стратегия для запуска тестов на нескольких версиях Node.js
+    strategy:
+      matrix:
+        node-version: [22.x]
+
+    steps:
+      # 1. Клонирование репозитория
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Настройка Node.js с использованием версии из матрицы
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          # Настройка кэширования для yarn для ускорения установки зависимостей
+          cache: 'yarn'
+
+      # 3. Установка зависимостей
+      # Используем --frozen-lockfile для гарантии, что будут установлены те же версии, что и в yarn.lock
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      # 4. Создание .env файла для CI/CD
+      # Эти переменные нужны для корректного запуска приложения во время тестов.
+      # Используйте GitHub Secrets для реальных секретных данных.
+      - name: Create .env file
+        run: |
+          echo "HTTP_PORT=3000" >> .env
+          echo "HTTP_HOST=http://localhost:3000" >> .env
+          # Добавьте сюда другие переменные, необходимые для тестов (например, DATABASE_URL)
+          # echo "DATABASE_URL=postgresql://user:password@localhost:5432/test_db" >> .env
+          echo "NODE_ENV=test" >> .env
+
+      # 5. Запуск линтера для проверки стиля кода
+      - name: Run linter
+        run: yarn lint
+
+      # 6. Запуск юнит-тестов
+      - name: Run unit tests
+        run: yarn test
+
+      # 7. Запуск e2e-тестов
+      # Если для e2e-тестов нужна база данных, ее можно поднять здесь с помощью Docker Compose
+      # - name: Start services for e2e tests
+      #   run: docker-compose -f docker-compose.test.yml up -d
+      - name: Run e2e tests
+        run: yarn test:e2e
+      # - name: Stop services
+      #   if: always()
+      #   run: docker-compose -f docker-compose.test.yml down
+
+      # 8. Сборка проекта для проверки, что все компилируется без ошибок
+      - name: Build project
+        run: yarn build
