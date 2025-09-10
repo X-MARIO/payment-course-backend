@@ -22,11 +22,11 @@ jobs:
         node-version: [22.x]
 
     steps:
-      # 1. Клонирование репозитория
+      # Клонирование репозитория
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Настройка Node.js с использованием версии из матрицы
+      # Настройка Node.js с использованием версии из матрицы
       - name: Set up Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
@@ -34,12 +34,16 @@ jobs:
           # Настройка кэширования для yarn для ускорения установки зависимостей
           cache: 'yarn'
 
-      # 3. Установка зависимостей
+      # Включаем Corepack для использования правильной версии Yarn
+      - name: Enable Corepack
+        run: corepack enable
+
+      # Установка зависимостей
       # Используем --frozen-lockfile для гарантии, что будут установлены те же версии, что и в yarn.lock
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      # 4. Создание .env файла для CI/CD
+      # Создание .env файла для CI/CD
       # Эти переменные нужны для корректного запуска приложения во время тестов.
       # Используйте GitHub Secrets для реальных секретных данных.
       - name: Create .env file
@@ -50,15 +54,15 @@ jobs:
           # echo "DATABASE_URL=postgresql://user:password@localhost:5432/test_db" >> .env
           echo "NODE_ENV=test" >> .env
 
-      # 5. Запуск линтера для проверки стиля кода
+      # Запуск линтера для проверки стиля кода
       - name: Run linter
         run: yarn lint
 
-      # 6. Запуск юнит-тестов
+      # Запуск юнит-тестов
       - name: Run unit tests
         run: yarn test
 
-      # 7. Запуск e2e-тестов
+      # Запуск e2e-тестов
       # Если для e2e-тестов нужна база данных, ее можно поднять здесь с помощью Docker Compose
       # - name: Start services for e2e tests
       #   run: docker-compose -f docker-compose.test.yml up -d
@@ -68,6 +72,6 @@ jobs:
       #   if: always()
       #   run: docker-compose -f docker-compose.test.yml down
 
-      # 8. Сборка проекта для проверки, что все компилируется без ошибок
+      # Сборка проекта для проверки, что все компилируется без ошибок
       - name: Build project
         run: yarn build
