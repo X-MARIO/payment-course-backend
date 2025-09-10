@@ -3,7 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import * as compression from 'compression';
 import * as cookieParser from 'cookie-parser';
+import * as csurf from 'csurf';
 import helmet from 'helmet';
+import * as hpp from 'hpp';
 import * as process from 'node:process';
 
 import { AppModule } from './app.module';
@@ -25,6 +27,10 @@ async function bootstrap() {
   app.use(compression());
   // Парсит Cookie и предоставляет их в req.cookies
   app.use(cookieParser());
+  // Защищает от CSRF-атак
+  app.use(csurf({ cookie: true }));
+  // Защищает от HTTP Parameter Pollution
+  app.use(hpp());
 
   // Настройка CORS
   app.enableCors(getCorsConfig(config));
