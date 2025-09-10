@@ -58,8 +58,8 @@ async function bootstrap() {
   try {
     await app.listen(port, '0.0.0.0'); // Слушаем на всех интерфейсах для работы в Docker
 
-    logger.log(`🚀 Server is running on: ${host}:${port}`);
-    logger.log(`📚 Swagger docs available at: ${host}:${port}/api/docs`);
+    logger.log(`🚀 Server is running on: ${host}`);
+    logger.log(`📚 Swagger docs available at: ${host}/api/docs`);
     logger.log(
       `✅ Application successfully started in ${
         process.env.NODE_ENV || 'development'
