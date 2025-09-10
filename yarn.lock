@@ -1575,6 +1575,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@nestjs/throttler@npm:^6.4.0":
+  version: 6.4.0
+  resolution: "@nestjs/throttler@npm:6.4.0"
+  peerDependencies:
+    "@nestjs/common": ^7.0.0 || ^8.0.0 || ^9.0.0 || ^10.0.0 || ^11.0.0
+    "@nestjs/core": ^7.0.0 || ^8.0.0 || ^9.0.0 || ^10.0.0 || ^11.0.0
+    reflect-metadata: ^0.1.13 || ^0.2.0
+  checksum: 10c0/796134644e341aad4a403b7431524db97adc31ae8771fc1160a4694a24c295b7a3dd15abcb72b9ea3a0702247b929f501fc5dc74a3f30d915f2667a39ba5c5d7
+  languageName: node
+  linkType: hard
+
 "@noble/hashes@npm:^1.1.5":
   version: 1.8.0
   resolution: "@noble/hashes@npm:1.8.0"
@@ -3107,6 +3118,7 @@ __metadata:
     "@nestjs/schematics": "npm:11.0.7"
     "@nestjs/swagger": "npm:11.2.0"
     "@nestjs/testing": "npm:11.1.6"
+    "@nestjs/throttler": "npm:^6.4.0"
     "@swc/cli": "npm:0.6.0"
     "@swc/core": "npm:1.13.5"
     "@trivago/prettier-plugin-sort-imports": "npm:5.2.2"
@@ -3119,8 +3131,8 @@ __metadata:
     "@types/react": "npm:19.1.12"
     "@types/react-dom": "npm:19.1.9"
     "@types/supertest": "npm:6.0.3"
-    class-transformer: "npm:^0.5.1"
-    class-validator: "npm:^0.14.2"
+    class-transformer: "npm:0.5.1"
+    class-validator: "npm:0.14.2"
     compression: "npm:1.8.1"
     cookie-parser: "npm:1.4.7"
     eslint: "npm:9.35.0"
@@ -3465,14 +3477,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"class-transformer@npm:^0.5.1":
+"class-transformer@npm:0.5.1":
   version: 0.5.1
   resolution: "class-transformer@npm:0.5.1"
   checksum: 10c0/19809914e51c6db42c036166839906420bb60367df14e15f49c45c8c1231bf25ae661ebe94736ee29cc688b77101ef851a8acca299375cc52fc141b64acde18a
   languageName: node
   linkType: hard
 
-"class-validator@npm:^0.14.2":
+"class-validator@npm:0.14.2":
   version: 0.14.2
   resolution: "class-validator@npm:0.14.2"
   dependencies:

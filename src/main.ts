@@ -49,8 +49,10 @@ async function bootstrap() {
     }),
   );
 
-  // Настраиваем Swagger для документирования API
-  setupSwagger(app);
+  // Настраиваем Swagger для документирования API, но только не в production
+  if (process.env.NODE_ENV !== 'production') {
+    setupSwagger(app);
+  }
 
   const port = config.getOrThrow<number>('HTTP_PORT');
   const host = config.getOrThrow<string>('HTTP_HOST');
@@ -58,8 +60,10 @@ async function bootstrap() {
   try {
     await app.listen(port, '0.0.0.0'); // Слушаем на всех интерфейсах для работы в Docker
 
-    logger.log(`🚀 Server is running on: ${host}`);
-    logger.log(`📚 Swagger docs available at: ${host}/api/docs`);
+    logger.log(`🚀 Server is running on: ${host}`); // Выводим только host, port не выводим
+    if (process.env.NODE_ENV !== 'production') {
+      logger.log(`📚 Swagger docs available at: ${host}/api/docs`);
+    }
     logger.log(
       `✅ Application successfully started in ${
         process.env.NODE_ENV || 'development'
