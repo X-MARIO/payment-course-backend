@@ -22,28 +22,40 @@ jobs:
         node-version: [22.x]
 
     steps:
-      # Клонирование репозитория
+      # 1. Клонирование репозитория
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Настройка Node.js с использованием версии из матрицы
+      # 2. Настройка Node.js с использованием версии из матрицы (без кэширования)
       - name: Set up Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          # Настройка кэширования для yarn для ускорения установки зависимостей
-          cache: 'yarn'
 
-      # Включаем Corepack для использования правильной версии Yarn
+      # 3. Включение Corepack для использования правильной версии Yarn
       - name: Enable Corepack
         run: corepack enable
 
-      # Установка зависимостей
+      # 4. Ручная настройка кэша для Yarn
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache yarn dependencies
+        uses: actions/cache@v4
+        id: yarn-cache
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      # 5. Установка зависимостей
       # Используем --frozen-lockfile для гарантии, что будут установлены те же версии, что и в yarn.lock
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      # Создание .env файла для CI/CD
+      # 6. Создание .env файла для CI/CD
       # Эти переменные нужны для корректного запуска приложения во время тестов.
       # Используйте GitHub Secrets для реальных секретных данных.
       - name: Create .env file
@@ -54,15 +66,15 @@ jobs:
           # echo "DATABASE_URL=postgresql://user:password@localhost:5432/test_db" >> .env
           echo "NODE_ENV=test" >> .env
 
-      # Запуск линтера для проверки стиля кода
+      # 7. Запуск линтера для проверки стиля кода
       - name: Run linter
         run: yarn lint
 
-      # Запуск юнит-тестов
+      # 8. Запуск юнит-тестов
       - name: Run unit tests
         run: yarn test
 
-      # Запуск e2e-тестов
+      # 9. Запуск e2e-тестов
       # Если для e2e-тестов нужна база данных, ее можно поднять здесь с помощью Docker Compose
       # - name: Start services for e2e tests
       #   run: docker-compose -f docker-compose.test.yml up -d
@@ -72,6 +84,5 @@ jobs:
       #   if: always()
       #   run: docker-compose -f docker-compose.test.yml down
 
-      # Сборка проекта для проверки, что все компилируется без ошибок
-      - name: Build project
-        run: yarn build
+      # 10. Сборка проекта для проверки, что все компилируется без ошибок
+      - name:
