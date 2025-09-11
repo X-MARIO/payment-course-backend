@@ -76,9 +76,17 @@ async function bootstrap() {
       } mode`,
     );
   } catch (error) {
-    logger.error('❌ Failed to start server', error.stack);
+    // Проверяем, является ли ошибка экземпляром Error для безопасного доступа к свойствам
+    if (error instanceof Error) {
+      logger.error(`📄 Сообщение: ${error.message}`);
+      // Безопасный доступ к свойству stack
+      logger.error(`📄 Стек вызовов: ${error.stack}`);
+    } else {
+      // Логируем ошибку, если она не является объектом Error
+      logger.error(`📄 Неизвестная ошибка: ${JSON.stringify(error)}`);
+    }
     process.exit(1);
   }
 }
 
-bootstrap();
+void bootstrap();
