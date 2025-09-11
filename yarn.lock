@@ -2041,7 +2041,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/csurf@npm:^1":
+"@types/csurf@npm:1":
   version: 1.11.5
   resolution: "@types/csurf@npm:1.11.5"
   dependencies:
@@ -2109,7 +2109,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/hpp@npm:^0.2.6":
+"@types/hpp@npm:0.2.6":
   version: 0.2.6
   resolution: "@types/hpp@npm:0.2.6"
   dependencies:
@@ -3142,9 +3142,9 @@ __metadata:
     "@trivago/prettier-plugin-sort-imports": "npm:5.2.2"
     "@types/compression": "npm:1.8.1"
     "@types/cookie-parser": "npm:1.4.9"
-    "@types/csurf": "npm:^1"
+    "@types/csurf": "npm:1"
     "@types/express": "npm:5.0.3"
-    "@types/hpp": "npm:^0.2.6"
+    "@types/hpp": "npm:0.2.6"
     "@types/jest": "npm:29.5.14"
     "@types/node": "npm:22.18.1"
     "@types/passport-jwt": "npm:4.0.1"
@@ -3155,13 +3155,13 @@ __metadata:
     class-validator: "npm:0.14.2"
     compression: "npm:1.8.1"
     cookie-parser: "npm:1.4.7"
-    csurf: "npm:^1.11.0"
+    csurf: "npm:1.11.0"
     eslint: "npm:9.35.0"
     eslint-config-prettier: "npm:10.1.8"
     eslint-plugin-prettier: "npm:5.5.4"
     globals: "npm:16.3.0"
     helmet: "npm:8.1.0"
-    hpp: "npm:^0.2.3"
+    hpp: "npm:0.2.3"
     jest: "npm:29.7.0"
     npm-check-updates: "npm:18.1.0"
     prettier: "npm:3.6.2"
@@ -3872,7 +3872,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"csurf@npm:^1.11.0":
+"csurf@npm:1.11.0":
   version: 1.11.0
   resolution: "csurf@npm:1.11.0"
   dependencies:
@@ -5097,7 +5097,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"hpp@npm:^0.2.3":
+"hpp@npm:0.2.3":
   version: 0.2.3
   resolution: "hpp@npm:0.2.3"
   dependencies:
