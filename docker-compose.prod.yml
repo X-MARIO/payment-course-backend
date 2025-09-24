@@ -17,6 +17,11 @@ services:
     networks:
       - app_network
     restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m" # Максимальный размер одного файла лога
+        max-file: "3"   # Количество файлов для ротации
 
   postgres:
     container_name: postgres_prod
@@ -26,10 +31,42 @@ services:
     # В production лучше не открывать порт БД наружу, если нет необходимости
     # ports:
     #   - "5433:5432"
+    # ВАЖНО: Хранение секретов в .env файлах небезопасно для production.
+    # Рассмотрите использование Docker Secrets или переменных окружения хост-машины.
     env_file:
       - .env.prod
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    environment:
+      # Пароль читается из Docker Secret, а не из .env файла
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
     networks:
       - app_network
-    restart: always
+    restart: alwaystgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m" # Максимальный размер одного файла лога
+        max-file: "3"   # Количество файлов для ротации
+
+# --- Декларация секции для секретов ---
+secrets:
+  postgres_password:
+    # В реальном проде этот файл не должен быть в репозитории
+    # Его нужно создавать на сервере перед запуском
+    file: ./postgres_password.txt

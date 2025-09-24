@@ -86,3 +86,32 @@ jobs:
       # 10. Сборка проекта для проверки, что все компилируется без ошибок
       - name: Build project
         run: yarn build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/backend/Dockerfile
+          # --- УЛУЧШЕНИЕ: Собираем сразу под две архитектуры ---
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: your-username/payment-course-backend:latest
+
+      - name: Scan image for vulnerabilities
+          uses: aquasecurity/trivy-action@master
+          with:
+            image-ref: 'your-image-name:tag' # Укажите имя вашего образа
+            format: 'table'
+            exit-code: '1' # Завершить сборку, если найдены уязвимости HIGH или CRITICAL
+            ignore-unfixed: true
+            vuln-type: 'os,library'
+            severity: 'CRITICAL,HIGH'

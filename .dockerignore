@@ -1,7 +1,15 @@
-# .dockerignore
-.git
-.github
+# Исключаем зависимости и артефакты сборки
 node_modules
 dist
+
+# Исключаем файлы IDE и Git
+.idea
+.git
+
+# Исключаем локальные переменные окружения (кроме примера)
 .env*
+!/.env.example
+
+# Логи и прочее
 npm-debug.log
+yarn-error.log

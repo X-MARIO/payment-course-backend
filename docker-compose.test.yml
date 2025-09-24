@@ -12,7 +12,8 @@ services:
     env_file:
       - .env.test
     depends_on:
-      - postgres-test
+      postgres-test:
+        condition: service_healthy
     networks:
       - app_network
 
@@ -28,4 +29,7 @@ services:
     volumes:
       - postgres_test_data:/var/lib/postgresql/data
     networks:
-      - app_network
+      - app_networkD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

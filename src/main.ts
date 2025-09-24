@@ -32,6 +32,9 @@ async function bootstrap() {
   // Защищает от HTTP Parameter Pollution
   app.use(hpp());
 
+  // Включаем обработчики для Graceful Shutdown
+  app.enableShutdownHooks();
+
   // Настройка CORS
   app.enableCors(getCorsConfig(config));
 

@@ -15,26 +15,40 @@ RUN yarn build
 
 # ----------------------------------------------------------------
 
-# Этап 3: Финальный production-образ (минимальный и безопасный)
-FROM node:24-alpine AS production
-WORKDIR /usr/src/app
+# Этап 3: Финальный production-образ (МАКСИМАЛЬНО безопасный)
+# Используем distroless образ, содержащий только Node.js
+FROM gcr.io/distroless/nodejs22-debian12 AS production
+WORKDIR /app
 ENV NODE_ENV=production
-# Копируем только необходимые артефакты
+
+# Создаем непривилегированного пользователя. В distroless он уже есть, но мы явно его указываем.
+USER nonroot
+
+# Копируем production-зависимости и скомпилированный код
+COPY --from=dependencies /usr/src/app/node_modules ./node_modules
 COPY --from=builder /usr/src/app/dist ./dist
-COPY --from=builder /usr/src/app/node_modules ./node_modules
-COPY --from=builder /usr/src/app/package.json ./package.json
-EXPOSE ${HTTP_PORT}
-CMD [ "node", "dist/main" ]
+
+EXPOSE 4000
+# CMD должен быть в формате exec, чтобы правильно обрабатывать сигналы ОС
+CMD ["dist/main.js"]
 
 # ----------------------------------------------------------------
 
 # Этап 4: Образ для разработки с hot-reload
 FROM node:24-alpine AS development
 WORKDIR /usr/src/app
-# Используем уже установленные зависимости
-COPY --from=dependencies /usr/src/app/node_modules ./node_modules
-# Копируем исходный код
-COPY . .
+
+# Создаем непривилегированного пользователя и группу
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# Используем уже установленные зависимости и выставляем права
+COPY --from=dependencies --chown=appuser:appgroup /usr/src/app/node_modules ./node_modules
+# Копируем исходный код и выставляем права
+COPY --chown=appuser:appgroup . .
+
+# Переключаемся на непривилегированного пользователя
+USER appuser
+
 EXPOSE ${HTTP_PORT}
 # Команда для запуска в режиме разработки
 CMD [ "yarn", "start:dev" ]
