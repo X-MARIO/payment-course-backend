@@ -58,13 +58,47 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
-  # ЗАДАЧА 2: Сборка, сканирование и публикация Docker-образа
+  # НОВАЯ ЗАДАЧА: Сканирование на наличие секретов в коде
+  secrets-scan:
+    name: Secrets Scan (TruffleHog)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      # TruffleHog сканирует всю историю коммитов на наличие случайно
+      # добавленных ключей API, паролей и других токенов.
+      - name: Run TruffleHog
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.before }}
+          head: ${{ github.sha }}
+          extra_args: --only-verified
+
+  # НОВАЯ ЗАДАЧА: Дополнительный SAST-анализ с помощью Semgrep
+  semgrep-scan:
+    name: Security Scan (Semgrep)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      # Semgrep — это быстрый и очень гибкий статический анализатор,
+      # который дополняет CodeQL и находит другие типы проблем.
+      - name: Run Semgrep
+        uses: semgrep/semgrep-action@v2
+        with:
+          # Публикуем отчет в раздел Security на GitHub
+          publish_token: ${{ secrets.GITHUB_TOKEN }}
+
+  # ЗАДАЧА 4: Сборка, сканирование и публикация Docker-образа
   build-scan-and-push:
     name: Build, Scan & Push Docker Image
     runs-on: ubuntu-latest
-    # 'needs: sast-scan' означает, что эта задача начнется только ПОСЛЕ
-    # успешного завершения задачи 'sast-scan'.
-    needs: sast-scan
+    # Задача начнется только после успеха ВСЕХ сканеров
+    needs: [sast-scan, secrets-scan, semgrep-scan]
     permissions:
       contents: read
       packages: write # Даем права на запись (публикацию) в реестр пакетов/образов (GHCR).
@@ -147,7 +181,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  # ЗАДАЧА 3: Развертывание в DEV-окружение
+  # ЗАДАЧА 5: Развертывание в DEV-окружение
   deploy-dev:
     name: Deploy to Development
     needs: build-scan-and-push
@@ -174,7 +208,7 @@ jobs:
             docker pull ghcr.io/${{ github.repository }}:main-latest
             docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate
 
-  # ЗАДАЧА 4: Развертывание в PROD-окружение
+  # ЗАДАЧА 6: Развертывание в PROD-окружение
   deploy-prod:
     name: Deploy to Production
     needs: build-scan-and-push
