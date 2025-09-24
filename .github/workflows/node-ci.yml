@@ -134,7 +134,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 1. Сканирование кода на уязвимости с помощью CodeQL от GitHub
+      # Сканирование кода на уязвимости с помощью CodeQL от GitHub
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
@@ -146,9 +146,34 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
-      # 2. Сканирование зависимостей на уязвимости
-      - name: Dependency Review
+      # Сканирование зависимостей (с разделением логики)
+      - name: Dependency Review (for Pull Requests)
+        if: github.event_name == 'pull_request'
         uses: actions/dependency-review-action@v4
         with:
-          # Завершать с ошибкой, если найдены уязвимости высокой или критической степени
           fail-on-severity: critical
+
+      - name: Audit Dependencies (for push to main)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          # Устанавливаем Node.js и зависимости для запуска аудита
+          # (этот шаг не кэшируется намеренно, чтобы быть быстрым и независимым)
+          actions/setup-node@v4
+            with:
+              node-version: '22.x'
+          corepack enable
+          yarn install --immutable
+          yarn npm audit --severity critical
+
+      # Этот шаг будет работать ТОЛЬКО при push в main
+      - name: Scan yarn.lock with Trivy (for Main branch)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'library'
+          severity: 'CRITICAL,HIGH'
