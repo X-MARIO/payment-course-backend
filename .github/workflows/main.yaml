@@ -12,9 +12,6 @@ on:
       - 'main'
     tags:
       - 'v*.*.*'
-  pull_request:
-    branches:
-      - 'main'
 
 jobs:
   # --- Этап 1: Сборка и тесты (аналогично node-ci.yml) ---
