@@ -1,54 +1,89 @@
-# Этап 1: Установка зависимостей для кэширования
+# -----------------------------------------------------------------------------
+# ЭТАП 1: 'dependencies' - Установка всех зависимостей
+# -----------------------------------------------------------------------------
+# Цель этого этапа — установить все зависимости (и для разработки, и для продакшена)
+# один раз. Docker закэширует этот слой, и если зависимости не менялись,
+# последующие сборки будут намного быстрее.
 FROM node:22-alpine AS dependencies
 WORKDIR /usr/src/app
-COPY package.json yarn.lock ./
-RUN yarn install --frozen-lockfile
 
-# ----------------------------------------------------------------
+# Включаем Corepack — это стандартный инструмент в новых версиях Node.js,
+# который позволяет использовать точную версию Yarn, указанную в вашем проекте (Yarn 4+).
+RUN corepack enable
 
-# Этап 2: Сборка production-версии приложения
+# Копируем ВСЕ файлы, необходимые для корректной установки Yarn 4+.
+COPY package.json yarn.lock .yarnrc.yml ./
+COPY .yarn ./.yarn
+
+# Запускаем установку всех зависимостей.
+RUN yarn install --immutable
+
+# -----------------------------------------------------------------------------
+# ЭТАП 2: 'builder' - Сборка приложения
+# -----------------------------------------------------------------------------
+# На этом этапе мы берем установленные зависимости и компилируем
+# наш TypeScript-код в JavaScript (в папку /dist).
 FROM node:22-alpine AS builder
 WORKDIR /usr/src/app
+# Копируем node_modules, установленные на предыдущем этапе.
 COPY --from=dependencies /usr/src/app/node_modules ./node_modules
+# Копируем весь остальной исходный код.
 COPY . .
+# Запускаем команду сборки из package.json (tsc).
 RUN yarn build
 
-# ----------------------------------------------------------------
-
-# Этап 3: Финальный production-образ (МАКСИМАЛЬНО безопасный)
-# Используем distroless образ, содержащий только Node.js
-FROM gcr.io/distroless/nodejs22-debian12 AS production
-WORKDIR /app
-ENV NODE_ENV=production
-
-# Создаем непривилегированного пользователя. В distroless он уже есть, но мы явно его указываем.
-USER nonroot
-
-# Копируем production-зависимости и скомпилированный код
-COPY --from=dependencies /usr/src/app/node_modules ./node_modules
-COPY --from=builder /usr/src/app/dist ./dist
-
-EXPOSE 4000
-# CMD должен быть в формате exec, чтобы правильно обрабатывать сигналы ОС
-CMD ["dist/main.js"]
-
-# ----------------------------------------------------------------
-
-# Этап 4: Образ для разработки с hot-reload
-FROM node:22-alpine AS development
+# -----------------------------------------------------------------------------
+# ЭТАП 3: 'prod-dependencies' - Подготовка production-зависимостей
+# -----------------------------------------------------------------------------
+# Этот этап нужен специально для distroless. Так как в distroless нет shell,
+# мы не можем запустить там 'yarn install'. Поэтому мы создаем отдельный
+# слой только с production-зависимостями.
+FROM node:22-alpine AS prod-dependencies
 WORKDIR /usr/src/app
 
-# Создаем непривилегированного пользователя и группу
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN corepack enable
 
-# Используем уже установленные зависимости и выставляем права
-COPY --from=dependencies --chown=appuser:appgroup /usr/src/app/node_modules ./node_modules
-# Копируем исходный код и выставляем права
-COPY --chown=appuser:appgroup . .
+COPY package.json yarn.lock .yarnrc.yml ./
+COPY .yarn ./.yarn
 
-# Переключаемся на непривилегированного пользователя
-USER appuser
+# Устанавливаем ТОЛЬКО production-зависимости.
+RUN yarn install --production --immutable
 
-EXPOSE ${HTTP_PORT}
-# Команда для запуска в режиме разработки
+# -----------------------------------------------------------------------------
+# ЭТАП 4: 'production' - Создание финального, distroless-образа
+# -----------------------------------------------------------------------------
+# Это — финальный образ, который будет работать в production.
+# Он МАКСИМАЛЬНО облегчен и безопасен, т.к. не содержит ничего,
+# кроме Node.js и нашего приложения.
+FROM gcr.io/distroless/nodejs22-debian12 AS production
+WORKDIR /usr/src/app
+ENV NODE_ENV=production
+
+# В distroless уже есть безопасный пользователь 'nonroot'.
+USER nonroot
+
+# Копируем скомпилированный JavaScript-код с этапа 'builder'.
+COPY --from=builder /usr/src/app/dist ./dist
+# Копируем очищенные production-зависимости с этапа 'prod-dependencies'.
+COPY --from=prod-dependencies /usr/src/app/node_modules ./node_modules
+
+# Указываем, какой порт будет слушать наше приложение.
+EXPOSE 4000
+# Команда, которая будет запущена при старте контейнера.
+# В distroless она должна быть в формате exec (массив строк).
+CMD ["dist/main.js"]
+
+# -----------------------------------------------------------------------------
+# ЭТАП 5: 'development' - Образ для локальной разработки
+# -----------------------------------------------------------------------------
+# Этот образ используется только для локальной разработки через docker-compose.dev.yml.
+# Он содержит все зависимости и исходный код для работы hot-reload.
+FROM node:22-alpine AS development
+WORKDIR /usr/src/app
+# Копируем все зависимости (включая dev) с самого первого этапа.
+COPY --from=dependencies /usr/src/app/node_modules ./node_modules
+# Копируем весь исходный код.
+COPY . .
+EXPOSE 4000
+# Запускаем приложение в режиме разработки с отслеживанием изменений.
 CMD [ "yarn", "start:dev" ]
