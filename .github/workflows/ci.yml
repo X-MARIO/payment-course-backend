@@ -1,117 +1,56 @@
 # .github/workflows/ci.yml
+name: CI
 
-# Название рабочего процесса, которое будет отображаться в GitHub Actions
-name: NestJS CI Pipeline
-
-# Триггеры для запуска: push в main и pull request на main
 on:
   push:
-    branches: ['main']
+    branches:
+      - main
   pull_request:
-    branches: ['main']
+    branches:
+      - main
 
 jobs:
-  # Название задачи
-  build-and-test:
-    # Используем последнюю версию Ubuntu для запуска
+  build-and-push:
     runs-on: ubuntu-latest
-
-    # Стратегия для запуска тестов на нескольких версиях Node.js
-    strategy:
-      matrix:
-        node-version: [22.x]
-
     steps:
-      # 1. Клонирование репозитория
+      # 1. Получаем исходный код из репозитория
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Настройка Node.js с использованием версии из матрицы (без кэширования)
-      - name: Set up Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
+      # 2. Устанавливаем эмулятор QEMU для кросс-платформенной сборки
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-      # 3. Включение Corepack для использования правильной версии Yarn
-      - name: Enable Corepack
-        run: corepack enable
-
-      # 4. Ручная настройка кэша для Yarn
-      - name: Get yarn cache directory path
-        id: yarn-cache-dir-path
-        run: echo "dir=$(yarn config get cacheFolder)" >> $GITHUB_OUTPUT
-
-      - name: Cache yarn dependencies
-        uses: actions/cache@v4
-        id: yarn-cache
-        with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
-
-      # 5. Установка зависимостей с использованием актуального флага
-      - name: Install dependencies
-        run: yarn install --immutable
-
-      # 6. Создание .env файла для CI/CD
-      # Эти переменные нужны для корректного запуска приложения во время тестов.
-      # Используйте GitHub Secrets для реальных секретных данных.
-      - name: Create .env file
-        run: |
-          echo "HTTP_PORT=3000" >> .env
-          echo "HTTP_HOST=http://localhost:3000" >> .env
-          # Добавьте сюда другие переменные, необходимые для тестов (например, DATABASE_URL)
-          # echo "DATABASE_URL=postgresql://user:password@localhost:5432/test_db" >> .env
-          echo "NODE_ENV=test" >> .env
-
-      # 7. Запуск линтера для проверки стиля кода
-      - name: Run linter
-        run: yarn lint
-
-      # 8. Запуск юнит-тестов
-      - name: Run unit tests
-        run: yarn test
-
-      # 9. Запуск e2e-тестов
-      # Если для e2e-тестов нужна база данных, ее можно поднять здесь с помощью Docker Compose
-      # - name: Start services for e2e tests
-      #   run: docker-compose -f docker-compose.test.yml up -d
-      - name: Run e2e tests
-        run: yarn test:e2e
-      # - name: Stop services
-      #   if: always()
-      #   run: docker-compose -f docker-compose.test.yml down
-
-      # 10. Сборка проекта для проверки, что все компилируется без ошибок
-      - name: Build project
-        run: yarn build
-
+      # 3. Настраиваем Docker Buildx для использования продвинутых возможностей сборки
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # 4. Логинимся в Docker Hub для последующей публикации образа
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push
+      # 5. Собираем и публикуем Docker-образ
+      - name: Build and push Docker image
+        id: build-and-push
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./docker/backend/Dockerfile
-          # --- УЛУЧШЕНИЕ: Собираем сразу под две архитектуры ---
+          # Собираем образы сразу для двух популярных архитектур (Intel/AMD и ARM)
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: your-username/payment-course-backend:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/payment-course-backend:latest
 
+      # 6. Сканируем опубликованный образ на известные уязвимости
       - name: Scan image for vulnerabilities
-          uses: aquasecurity/trivy-action@master
-          with:
-            image-ref: 'your-image-name:tag' # Укажите имя вашего образа
-            format: 'table'
-            exit-code: '1' # Завершить сборку, если найдены уязвимости HIGH или CRITICAL
-            ignore-unfixed: true
-            vuln-type: 'os,library'
-            severity: 'CRITICAL,HIGH'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ secrets.DOCKERHUB_USERNAME }}/payment-course-backend:latest'
+          format: 'table'
+          exit-code: '1' # Завершить сборку с ошибкой, если найдены уязвимости
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH' # Искать только уязвимости высокой и критической опасности

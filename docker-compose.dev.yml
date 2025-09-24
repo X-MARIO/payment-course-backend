@@ -7,17 +7,21 @@ services:
     build:
       context: .
       dockerfile: docker/backend/Dockerfile
-      target: development
-    volumes:
-      - .:/usr/src/app
-      - /usr/src/app/node_modules
+      target: development # Используем стадию для разработки с hot-reload
     ports:
-      - "4000:4000" # <-- Ваш порт
-      - "9229:9229"
+      - "4000:4000"
+      - "9229:9229" # Пробрасываем порт для подключения отладчика
+    volumes:
+      # Синхронизируем исходный код для hot-reload
+      - .:/usr/src/app
+      # Изолируем node_modules в контейнере, чтобы избежать конфликтов с локальной средой
+      - /usr/src/app/node_modules
     env_file:
       - .env.dev
     depends_on:
-      - postgres
+      postgres:
+        # Ожидаем, пока healthcheck базы данных не вернет успешный статус
+        condition: service_healthy
     networks:
       - app_network
 
@@ -27,29 +31,17 @@ services:
       context: .
       dockerfile: docker/postgres/Dockerfile
     ports:
-      - "5433:5432" # <-- Ваш порт
+      # Пробрасываем порт для подключения к БД с локальной машины
+      - "5433:5432"
     env_file:
       - .env.dev
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - app_network
+    # Проверка состояния, гарантирующая, что бэкенд не запустится раньше БД
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DATABASE"]
       interval: 10s
       timeout: 5s
-      retries: 5     start_period: 10s
-
-  postgres:
-    container_name: postgres_dev
-    build:
-      context: .
-      dockerfile: docker/postgres/Dockerfile
-    ports:
-      - "5433:5432" # <-- Ваш порт
-    env_file:
-      - .env.dev
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - app_network
+      retries: 5

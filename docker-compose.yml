@@ -1,10 +1,13 @@
 # docker-compose.yml
 version: '3.9'
 
+# Определяем тома для персистентного хранения данных
+# Это гарантирует, что данные БД не будут утеряны при перезапуске контейнеров
 volumes:
   postgres_data:
   postgres_test_data:
 
+# Определяем общую сеть для взаимодействия сервисов друг с другом
 networks:
   app_network:
     driver: bridge

@@ -7,66 +7,45 @@ services:
     build:
       context: .
       dockerfile: docker/backend/Dockerfile
-      target: production
+      target: production # Используем оптимизированную production-стадию
     ports:
-      - "4000:4000" # <-- Ваш порт
+      - "4000:4000"
     env_file:
       - .env.prod
-    depends_on:
-      - postgres
     networks:
       - app_network
     restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy # Ожидаем, пока БД не будет готова
+    # Ограничение ресурсов для защиты хост-машины от перегрузок
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50' # Ограничение в 50% одного ядра CPU
+          memory: 512M # Ограничение в 512 MB RAM
+    # Настройка ротации логов для предотвращения переполнения диска
     logging:
       driver: "json-file"
       options:
-        max-size: "10m" # Максимальный размер одного файла лога
-        max-file: "3"   # Количество файлов для ротации
+        max-size: "10m"
+        max-file: "3"
 
   postgres:
     container_name: postgres_prod
     build:
       context: .
       dockerfile: docker/postgres/Dockerfile
-    # В production лучше не открывать порт БД наружу, если нет необходимости
-    # ports:
-    #   - "5433:5432"
-    # ВАЖНО: Хранение секретов в .env файлах небезопасно для production.
-    # Рассмотрите использование Docker Secrets или переменных окружения хост-машины.
+    # ВАЖНО: В production порт базы данных не должен быть открыт наружу
     env_file:
       - .env.prod
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    environment:
-      # Пароль читается из Docker Secret, а не из .env файла
-      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
-    secrets:
-      - postgres_password
     networks:
       - app_network
-    restart: alwaystgresql/data
+    restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DATABASE"]
       interval: 10s
       timeout: 5s
       retries: 5
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 1G
-        reservations:
-          cpus: '0.25'
-          memory: 512M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m" # Максимальный размер одного файла лога
-        max-file: "3"   # Количество файлов для ротации
-
-# --- Декларация секции для секретов ---
-secrets:
-  postgres_password:
-    # В реальном проде этот файл не должен быть в репозитории
-    # Его нужно создавать на сервере перед запуском
-    file: ./postgres_password.txt

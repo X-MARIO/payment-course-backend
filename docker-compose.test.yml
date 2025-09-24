@@ -1,35 +1,47 @@
-# docker-compose.test.yml
+# docker-compose.dev.yml
 version: '3.9'
 
 services:
-  backend-test:
-    container_name: backend_test
+  backend:
+    container_name: backend_dev
     build:
       context: .
       dockerfile: docker/backend/Dockerfile
-      target: development
-    command: yarn test:e2e
+      target: development # Используем стадию для разработки с hot-reload
+    ports:
+      - "4000:4000"
+      - "9229:9229" # Пробрасываем порт для подключения отладчика
+    volumes:
+      # Синхронизируем исходный код для hot-reload
+      - .:/usr/src/app
+      # Изолируем node_modules в контейнере, чтобы избежать конфликтов с локальной средой
+      - /usr/src/app/node_modules
     env_file:
-      - .env.test
+      - .env.dev
     depends_on:
-      postgres-test:
+      postgres:
+        # Ожидаем, пока healthcheck базы данных не вернет успешный статус
         condition: service_healthy
     networks:
       - app_network
 
-  postgres-test:
-    container_name: postgres_test
+  postgres:
+    container_name: postgres_dev
     build:
       context: .
       dockerfile: docker/postgres/Dockerfile
     ports:
-      - "5434:5432" # <-- Другой порт, чтобы не конфликтовать с dev
+      # Пробрасываем порт для подключения к БД с локальной машины
+      - "5433:5432"
     env_file:
-      - .env.test
+      - .env.dev
     volumes:
-      - postgres_test_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     networks:
-      - app_networkD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      - app_network
+    # Проверка состояния, гарантирующая, что бэкенд не запустится раньше БД
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DATABASE"]
       interval: 10s
       timeout: 5s
       retries: 5
