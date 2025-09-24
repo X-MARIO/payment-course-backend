@@ -1,0 +1,169 @@
+# .github/workflows/main-ci.yml
+
+name: Main CI/CD
+
+# Триггеры:
+# 1. push в ветку 'main' (например, после мержа PR).
+# 2. Создание нового тега вида 'v*.*.*' (например, v1.2.3).
+
+on:
+  push:
+    branches:
+      - 'main'
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches:
+      - 'main'
+
+jobs:
+  # --- Этап 1: Сборка и тесты (аналогично node-ci.yml) ---
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Используем наш готовый action для настройки.
+      - name: Setup Node.js Environment
+        uses: ./.github/actions/setup-node
+
+      # Используем наш готовый action для тестов.
+      - name: Install, Test, and Lint
+        uses: ./.github/actions/run-tests
+
+  # --- Этап 2: Сборка, сканирование и публикация Docker-образа ---
+  build-scan-and-push:
+    name: Build, Scan & Push Docker Image
+    runs-on: ubuntu-latest
+    # Начнется только после успешного завершения 'build-and-test'.
+    needs: build-and-test
+    permissions:
+      contents: read
+      packages: write # Права на запись в GitHub Packages/Container Registry
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Логинимся в GitHub Container Registry, чтобы публиковать образ.
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }} # Специальный токен для аутентификации в CI
+
+      # Этот action автоматически генерирует теги для Docker-образа.
+      # Например: latest, v1.2.3, v1.2, v1.
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch,pattern=main
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+
+      # Снова собираем образ, но на этот раз сохраняем для сканирования и последующей публикации.
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/backend/Dockerfile
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=docker,dest=/tmp/image.tar
+
+      # Сканируем на уязвимости перед публикацией.
+      - name: Scan image for vulnerabilities with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          input: /tmp/image.tar
+          format: 'table'
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+          exit-code: '1'
+
+      # Публикуем образ в GHCR.
+      # Условие 'if: github.event_name != 'pull_request'' — это защита, чтобы случайно не опубликовать образ из PR.
+      - name: Push Docker image to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/backend/Dockerfile
+          push: true # Главное отличие - здесь push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  # --- Этап 3: Деплой на Development сервер ---
+  deploy-dev:
+    name: Deploy to Development
+    needs: build-scan-and-push
+    runs-on: ubuntu-latest
+    # Запускать деплой только при push в ветку main.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: # Указываем окружение, чтобы использовать переменные и секреты из настроек GitHub
+      name: development
+      url: ${{ vars.DEV_URL }}
+    steps:
+      # Подключаемся к серверу по SSH и выполняем команды.
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.DEV_REMOTE_HOST }}
+          username: ${{ secrets.DEV_REMOTE_USER }}
+          key: ${{ secrets.DEV_REMOTE_KEY }}
+          script: |
+            cd ${{ vars.DEV_REMOTE_PATH }}
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker pull ghcr.io/${{ github.repository }}:main
+            docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate
+
+  # --- Этап 4: Деплой на Production сервер ---
+  deploy-prod:
+    name: Deploy to Production
+    needs: build-scan-and-push
+    runs-on: ubuntu-latest
+    # Запускать деплой только при создании нового тега (релиза).
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: production
+      url: ${{ vars.PROD_URL }}
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.PROD_REMOTE_HOST }}
+          username: ${{ secrets.PROD_REMOTE_USER }}
+          key: ${{ secrets.PROD_REMOTE_KEY }}
+          script: |
+            cd ${{ vars.PROD_REMOTE_PATH }}
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            export IMAGE_TAG=${{ github.ref_name }}
+            docker pull ghcr.io/${{ github.repository }}:${IMAGE_TAG}
+            docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate

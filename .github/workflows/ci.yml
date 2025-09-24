@@ -1,52 +1,27 @@
 # .github/workflows/ci.yml
 
-# -----------------------------------------------------------------------------
-# ИМЯ РАБОЧЕГО ПРОЦЕССА (WORKFLOW)
-# -----------------------------------------------------------------------------
-# Это имя будет отображаться в списке Actions вашего репозитория на GitHub.
-name: Docker CI/CD (Recommended)
+name: Docker CI (PR)
 
-# -----------------------------------------------------------------------------
-# ТРИГГЕРЫ (TRIGGERS)
-# -----------------------------------------------------------------------------
-# Этот раздел определяет, какие события в репозитории будут запускать пайплайн.
 on:
   push:
-    # 1. При отправке коммитов в ветку 'main'.
-    # Это основной сценарий для развертывания в dev-окружение.
     branches:
       - 'main'
-    # 2. При создании Git-тега, который начинается с 'v' (например, v1.0.0).
-    # Это стандартная практика для запуска релиза и развертывания в production.
-    tags:
-      - 'v*.*.*'
-  # 3. При создании или обновлении Pull Request'а в ветку 'main'.
-  # Это позволяет прогонять тесты и проверки до слияния кода.
   pull_request:
     branches:
       - 'main'
 
-# -----------------------------------------------------------------------------
-# ЗАДАЧИ (JOBS)
-# -----------------------------------------------------------------------------
-# Рабочий процесс состоит из одной или нескольких задач.
-# Задачи могут выполняться параллельно или последовательно.
 jobs:
-  # ЗАДАЧА 1: Статический анализ кода на уязвимости (SAST)
+  # SAST (Static Application Security Testing) - статический анализ безопасности.
   sast-scan:
     name: SAST Code Scan
-    # Всегда указываем, на какой виртуальной машине будет выполняться задача.
     runs-on: ubuntu-latest
-    # Задаем права доступа для этой задачи. Это лучшая практика безопасности.
     permissions:
-      contents: read # Разрешаем чтение кода для анализа.
-      security-events: write # Разрешаем загружать отчеты о безопасности в GitHub.
+      contents: read
+      security-events: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # CodeQL — это мощный инструмент от GitHub для поиска уязвимостей
-      # прямо в исходном коде, не запуская его.
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
@@ -58,154 +33,44 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
-  # ЗАДАЧА 2: Сборка, сканирование и публикация Docker-образа
-  build-scan-and-push:
-    name: Build, Scan & Push Docker Image
+  # Задача по сборке и сканированию Docker-образа.
+  build-and-scan-docker:
+    name: Build & Scan Docker Image
     runs-on: ubuntu-latest
-    # 'needs: sast-scan' означает, что эта задача начнется только ПОСЛЕ
-    # успешного завершения задачи 'sast-scan'.
+    # 'needs' означает, что эта задача начнется только после успешного завершения 'sast-scan'.
     needs: sast-scan
     permissions:
       contents: read
-      packages: write # Даем права на запись (публикацию) в реестр пакетов/образов (GHCR).
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Настройка QEMU и Buildx — это стандартные шаги для включения
-      # продвинутых и ускоренных сборок Docker, включая сборку
-      # под разные процессорные архитектуры (например, Intel и Apple Silicon).
+      # Настраиваем окружение для сборки Docker-образов.
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Авторизуемся в реестре контейнеров GitHub (GHCR).
-      # secrets.GITHUB_TOKEN — это временный токен, который GitHub Actions
-      # создает автоматически для каждого запуска, что очень безопасно.
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Это один из самых важных шагов. Он автоматически генерирует
-      # правильные и осмысленные теги для нашего Docker-образа на основе
-      # события, которое запустило пайплайн (push, tag и т.д.).
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            # ИСПРАВЛЕНО: Для ветки 'main' будет создан тег 'main'.
-            type=ref,event=branch,pattern=main
-            # Для Git-тега v1.2.3 будут созданы теги 'v1.2.3', 'v1.2', 'v1'.
-            # Это позволяет гибко управлять версиями при развертывании.
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-
-      # Сначала мы собираем образ, но не публикуем его (push: false).
-      # Вместо этого, мы сохраняем его как локальный tar-архив.
-      # Это позволяет нам просканировать его на уязвимости ПЕРЕД публикацией.
+      # Собираем Docker-образ, но не публикуем его (push: false).
+      # Просто проверяем, что сборка проходит успешно.
       - name: Build Docker image
-        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./docker/backend/Dockerfile
           push: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          # Сохраняем собранный образ в виде tar-архива для сканирования.
           outputs: type=docker,dest=/tmp/image.tar
 
-      # Сканируем созданный tar-архив с помощью Trivy.
-      # Если будут найдены уязвимости HIGH или CRITICAL, шаг завершится с ошибкой,
-      # и весь пайплайн остановится, не допустив публикации уязвимого образа.
+      # Сканируем собранный образ на уязвимости с помощью Trivy.
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@master
         with:
           input: /tmp/image.tar
           format: 'table'
+          # Искать уязвимости только высокого и критического уровня.
           severity: 'HIGH,CRITICAL'
+          # Игнорировать уязвимости, для которых еще нет исправления.
           ignore-unfixed: true
+          # Завершить CI с ошибкой (код 1), если найдены уязвимости.
           exit-code: '1'
-
-      # Этот шаг выполняется, только если сканирование прошло успешно.
-      # Он публикует наш проверенный образ в реестр GHCR.
-      # Шаг пропускается для Pull Request'ов, так как для них публикация не нужна.
-      - name: Push Docker image to GHCR
-        if: github.event_name != 'pull_request'
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./docker/backend/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-  # ЗАДАЧА 3: Развертывание в DEV-окружение
-  deploy-dev:
-    name: Deploy to Development
-    needs: build-scan-and-push
-    runs-on: ubuntu-latest
-    # Запускается только при push в ветку 'main'.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    # Используем 'environments' — специальную функцию GitHub для управления
-    # секретами и переменными для разных сред (dev, prod).
-    environment:
-      name: development
-      url: ${{ vars.DEV_URL }} # URL можно задать в настройках окружения.
-
-    steps:
-      # Подключаемся к вашему dev-серверу по SSH.
-      # Все данные для подключения (хост, юзер, ключ) берутся из секретов
-      # и переменных, настроенных для окружения 'development'.
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ vars.DEV_REMOTE_HOST }}
-          username: ${{ secrets.DEV_REMOTE_USER }}
-          key: ${{ secrets.DEV_REMOTE_KEY }}
-          script: |
-            # Переходим в рабочую директорию на сервере
-            cd ${{ vars.DEV_REMOTE_PATH }}
-            # Логинимся в GHCR на сервере, чтобы иметь возможность скачать образ
-            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            # ИСПРАВЛЕНО: Скачиваем последнюю версию образа для ветки main с тегом 'main'
-            docker pull ghcr.io/${{ github.repository }}:main
-            # Перезапускаем сервисы с помощью docker-compose.
-            # Флаг --force-recreate гарантирует, что будет использован новый образ.
-            docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate
-
-  # ЗАДАЧА 4: Развертывание в PROD-окружение
-  deploy-prod:
-    name: Deploy to Production
-    needs: build-scan-and-push
-    runs-on: ubuntu-latest
-    # Запускается только при создании тега, начинающегося с 'v'.
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    environment:
-      name: production
-      url: ${{ vars.PROD_URL }}
-
-    steps:
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ vars.PROD_REMOTE_HOST }}
-          username: ${{ secrets.PROD_REMOTE_USER }}
-          key: ${{ secrets.PROD_REMOTE_KEY }}
-          script: |
-            cd ${{ vars.PROD_REMOTE_PATH }}
-            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            # Получаем имя тега (например, v1.2.3) из переменной GitHub Actions
-            export IMAGE_TAG=${{ github.ref_name }}
-            # Скачиваем образ с конкретным версионным тегом.
-            # В production всегда используется точная версия, а не 'latest'.
-            docker pull ghcr.io/${{ github.repository }}:${IMAGE_TAG}
-            # Перезапускаем сервисы.
-            docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate

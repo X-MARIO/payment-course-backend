@@ -1,0 +1,49 @@
+# .github/actions/setup-node/action.yml
+
+name: 'Setup Node.js Environment'
+description: 'Sets up Node.js, enables Corepack, and caches Yarn dependencies'
+
+# Определяем входные параметры для нашего action.
+# Это позволяет нам передавать, например, разную версию Node.js, если потребуется.
+inputs:
+  node-version:
+    description: 'Node.js version to use'
+    required: false
+    default: '22.x' # Версия по умолчанию
+
+# 'composite' означает, что этот action будет состоять из нескольких шагов (steps).
+runs:
+  using: "composite"
+  steps:
+    # Шаг 1: Устанавливаем Node.js.
+    # Используем готовый action от GitHub `actions/setup-node`.
+    - name: Set up Node.js ${{ inputs.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    # Шаг 2: Включаем corepack.
+    # Это необходимо для работы с менеджером пакетов Yarn, который используется в проекте.
+    - name: Enable Corepack
+      shell: bash
+      run: corepack enable
+
+    # Шаг 3: Получаем путь к папке с кешем Yarn.
+    # Эта команда сохраняет путь в переменную, чтобы использовать его на следующем шаге.
+    - name: Get yarn cache directory path
+      id: yarn-cache-dir-path
+      shell: bash
+      run: echo "dir=$(yarn config get cacheFolder)" >> $GITHUB_OUTPUT
+
+    # Шаг 4: Кешируем зависимости.
+    # Это один из самых важных шагов для ускорения CI.
+    # Если файл yarn.lock не изменился, CI не будет заново скачивать все зависимости, а возьмёт их из кеша.
+    - name: Cache yarn dependencies
+      uses: actions/cache@v4
+      id: yarn-cache
+      with:
+        path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+        # Ключ кеша. Если hash файла yarn.lock меняется, кеш становится невалидным и создается новый.
+        key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-yarn-

@@ -1,41 +1,21 @@
 # .github/workflows/node-ci.yml
 
-# -----------------------------------------------------------------------------
-# ИМЯ РАБОЧЕГО ПРОЦЕССА (WORKFLOW)
-# -----------------------------------------------------------------------------
-# Это имя будет отображаться в списке Actions вашего репозитория на GitHub.
-name: Node.js CI & Security Scan
+name: Node.js CI & Security Scan (PR)
 
-# -----------------------------------------------------------------------------
-# ТРИГГЕРЫ (TRIGGERS)
-# -----------------------------------------------------------------------------
-# Этот раздел определяет, какие события в репозитории будут запускать пайплайн.
 on:
   push:
-    # 1. При отправке коммитов в ветку 'main'.
-    # Это основной сценарий для развертывания в dev-окружение.
     branches:
       - 'main'
-    # 2. При создании Git-тега, который начинается с 'v' (например, v1.0.0).
-    # Это стандартная практика для запуска релиза и развертывания в production.
-    tags:
-      - 'v*.*.*'
-  # 3. При создании или обновлении Pull Request'а в ветку 'main'.
-  # Это позволяет прогонять тесты и проверки до слияния кода.
   pull_request:
     branches:
       - 'main'
 
 jobs:
-  # ЗАДАЧА 1: Сборка и все виды тестов
+  # Первая задача: сборка и тестирование приложения.
   build-and-test:
     name: Build & Test
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [22.x]
-
-    # Подключаем сервис PostgreSQL, который будет доступен для e2e-тестов
+    # Поднимаем сервис с базой данных PostgreSQL, который будет доступен для e2e-тестов.
     services:
       postgres:
         image: postgres:16-alpine
@@ -44,123 +24,38 @@ jobs:
           POSTGRES_PASSWORD: testpassword
           POSTGRES_DB: testdb
         ports:
-          - 5432:5432
-        # Опция для проверки готовности сервиса перед запуском шагов
+          - 5432:5432 # Пробрасываем порт, чтобы приложение могло подключиться к БД.
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
     steps:
-      # Шаг 1: Клонирование репозитория
+      # Шаг 1: Клонируем репозиторий, чтобы получить доступ к коду.
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Шаг 2: Настройка Node.js с использованием версии из матрицы
-      - name: Set up Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
+      # Шаг 2: Вызываем наш первый переиспользуемый action для настройки окружения.
+      - name: Setup Node.js Environment
+        uses: ./.github/actions/setup-node
 
-      # Шаг 3: Включение Corepack для использования правильной версии Yarn
-      - name: Enable Corepack
-        run: corepack enable
+      # Шаг 3: Вызываем второй action для установки зависимостей и запуска тестов.
+      - name: Install, Test, and Lint
+        uses: ./.github/actions/run-tests
 
-      # Шаг 4: Настройка кэша для Yarn для ускорения последующих сборок
-      - name: Get yarn cache directory path
-        id: yarn-cache-dir-path
-        run: echo "dir=$(yarn config get cacheFolder)" >> $GITHUB_OUTPUT
-
-      - name: Cache yarn dependencies
-        uses: actions/cache@v4
-        id: yarn-cache
-        with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
-
-      # Шаг 5: Установка зависимостей
-      - name: Install dependencies
-        run: yarn install --immutable
-
-      # Шаг 6: Проверка на устаревшие пакеты (информационный шаг)
-      - name: Check for outdated packages (Informational)
-        run: yarn outdated
-        # Этот шаг не уронит сборку, а просто выведет информацию в лог
-        continue-on-error: true
-
-      # Шаг 7: Создание .env файла для CI/CD
-      - name: Create .env file for tests
-        run: |
-          echo "HTTP_PORT=3000" >> .env
-          echo "HTTP_HOST=http://localhost:3000" >> .env
-          echo "POSTGRES_HOST=localhost" >> .env
-          echo "POSTGRES_PORT=5432" >> .env
-          echo "POSTGRES_USER=testuser" >> .env
-          echo "POSTGRES_PASSWORD=testpassword" >> .env
-          echo "POSTGRES_DATABASE=testdb" >> .env
-          echo "NODE_ENV=test" >> .env
-
-      # Шаг 8: Запуск линтера для проверки стиля кода
-      - name: Run linter
-        run: yarn lint
-
-      # Шаг 9: Запуск юнит-тестов
-      - name: Run unit tests
-        run: yarn test
-
-      # Шаг 10: Запуск e2e-тестов с использованием сервиса PostgreSQL
-      - name: Run e2e tests
-        run: yarn test:e2e
-
-  # ЗАДАЧА 2: Проверка Production сборки
-  check-production-build:
-    name: Check Production Build
-    runs-on: ubuntu-latest
-    # Эта задача начнется только после успешного завершения 'build-and-test'
-    needs: build-and-test
-    strategy:
-      matrix:
-        node-version: [22.x]
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      # Устанавливаем только production-зависимости, чтобы убедиться,
-      # что в билд не попали dev-зависимости.
-      - name: Install production dependencies
-        run: yarn install --production --immutable
-
-      # Собираем проект для проверки, что все компилируется без ошибок.
-      - name: Build project
-        run: yarn build
-
-  # ЗАДАЧА 3: Сканирование уязвимостей
+  # Вторая задача: сканирование кода на уязвимости с помощью CodeQL.
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
-    permissions:
+    permissions: # Выдаем необходимые права для работы CodeQL
       contents: read
       security-events: write
       actions: read
-
     steps:
-      # Шаг 1: Клонирование репозитория
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Шаг 2: Статический анализ кода на уязвимости с помощью CodeQL
+      # Инициализируем CodeQL для анализа TypeScript кода.
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
@@ -169,64 +64,13 @@ jobs:
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
 
+      # Запускаем анализ и отправляем результаты в GitHub Security.
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
-      # Шаг 3: Проверка зависимостей, добавляемых в Pull Request
-      - name: Dependency Review (for Pull Requests)
-        if: github.event_name == 'pull_request'
+      # Проверяем зависимости на наличие известных уязвимостей.
+      - name: Dependency Review
         uses: actions/dependency-review-action@v4
         with:
+          # Завершить CI с ошибкой, если найдена уязвимость критического уровня.
           fail-on-severity: critical
-
-      # --- Шаги, которые выполняются только при push в main ---
-
-      # Шаг 4.1: Настройка Node.js и зависимостей для сканирования
-      - name: Set up Node.js for Scan (for push to main)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22.x'
-
-      - name: Install dependencies for Scan (for push to main)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          corepack enable
-          yarn install --immutable
-
-      # Шаг 4.2: Аудит на КРИТИЧЕСКИЕ уязвимости (роняет сборку)
-      - name: Audit for CRITICAL vulnerabilities
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: yarn npm audit --severity critical
-
-      # Шаг 4.3: Информационный аудит всех уязвимостей (не роняет сборку)
-      - name: Audit for NON-CRITICAL vulnerabilities (Informational)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: yarn npm audit
-        continue-on-error: true
-
-      # Шаг 4.4: Сканирование Trivy на CRITICAL/HIGH уязвимости (роняет сборку)
-      - name: Scan for CRITICAL/HIGH vulns with Trivy
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'table'
-          exit-code: '1' # Завершить с ошибкой, если что-то найдено
-          ignore-unfixed: true
-          vuln-type: 'library'
-          severity: 'CRITICAL,HIGH'
-
-      # Шаг 4.5: Информационное сканирование Trivy на LOW/MEDIUM (не роняет сборку)
-      - name: Scan for LOW/MEDIUM vulns with Trivy (Informational)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'table'
-          exit-code: '0' # НЕ завершать с ошибкой, просто вывести отчет
-          ignore-unfixed: true
-          vuln-type: 'library'
-          severity: 'LOW,MEDIUM,UNKNOWN'
