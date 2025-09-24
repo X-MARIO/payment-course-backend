@@ -12,7 +12,9 @@ jobs:
   # --- ЭТАП 1: ТЕСТИРОВАНИЕ ---
   tests:
     name: Build & Test
-    uses: X-MARIO/shared-workflows/.github/workflows/reusable-node-tests.yml@${{ secrets.SHARED_WORKFLOWS_VERSION }}
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-node-tests.yml@main
+    with:
+      shared-workflows-version: ${{ vars.SHARED_WORKFLOWS_VERSION }}
     secrets: inherit
 
   # --- ЭТАП 2: СБОРКА ОБРАЗА ---
@@ -23,7 +25,9 @@ jobs:
       contents: read
       packages: write
       security-events: write
-    uses: X-MARIO/shared-workflows/.github/workflows/reusable-docker-build.yml@${{ secrets.SHARED_WORKFLOWS_VERSION }}
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-docker-build.yml@main
+    with:
+      shared-workflows-version: ${{ vars.SHARED_WORKFLOWS_VERSION }}
     secrets: inherit
 
   # --- ЭТАП 3: ДЕПЛОЙ В DEV ---
@@ -31,12 +35,13 @@ jobs:
     name: Deploy to Development
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: X-MARIO/shared-workflows/.github/workflows/reusable-deploy.yml@${{ secrets.SHARED_WORKFLOWS_VERSION }}
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-deploy.yml@main
     with:
-      environment_name: development
-      environment_url: ${{ vars.DEV_URL }}
-      image_tag: main
-      compose_file: docker-compose.dev.yml
+      environment-name: development
+      environment-url: ${{ vars.DEV_URL }}
+      image-tag: main
+      compose-file: docker-compose.dev.yml
+      shared-workflows-version: ${{ vars.SHARED_WORKFLOWS_VERSION }}
     secrets:
       remote_host: ${{ secrets.DEV_REMOTE_HOST }}
       remote_user: ${{ secrets.DEV_REMOTE_USER }}
@@ -48,12 +53,13 @@ jobs:
     name: Deploy to Production
     needs: build
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    uses: X-MARIO/shared-workflows/.github/workflows/reusable-deploy.yml@${{ secrets.SHARED_WORKFLOWS_VERSION }}
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-deploy.yml@main
     with:
-      environment_name: production
-      environment_url: ${{ vars.PROD_URL }}
-      image_tag: ${{ github.ref_name }}
-      compose_file: docker-compose.prod.yml
+      environment-name: production
+      environment-url: ${{ vars.PROD_URL }}
+      image-tag: ${{ github.ref_name }}
+      compose-file: docker-compose.prod.yml
+      shared-workflows-version: ${{ vars.SHARED_WORKFLOWS_VERSION }}
     secrets:
       remote_host: ${{ secrets.PROD_REMOTE_HOST }}
       remote_user: ${{ secrets.PROD_REMOTE_USER }}
