@@ -3,7 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
-import { UsersController } from './api/users/users.controller';
+import { UsersModule } from './api/users/users.module';
 
 @Module({
   imports: [
@@ -16,8 +16,8 @@ import { UsersController } from './api/users/users.controller';
         limit: 10, // 10 запросов с одного IP
       },
     ]),
+    UsersModule,
   ],
-  controllers: [UsersController],
   providers: [
     {
       provide: APP_GUARD,
