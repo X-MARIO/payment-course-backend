@@ -8,20 +8,21 @@ on:
       - 'main'
 
 jobs:
-  # --- Задача 1: Сборка и сканирование Docker-образа ---
   build:
     name: Build & Scan Docker Image
-    uses: X-MARIO/shared-workflows/.github/workflows/reusable-docker-build.yml@main
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-docker-build.yml@v1.0.0
     secrets: inherit
 
-  # --- Задача 2: Статический анализ кода ---
   sast:
     name: Security Analysis
-    uses: X-MARIO/shared-workflows/.github/workflows/reusable-security-scan.yml@main
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-security-scan.yml@v1.0.0
     secrets: inherit
 
-  # --- Задача 3: Сканирование на наличие секретов ---
   secrets-scan:
     name: Gitleaks Secrets Scan
-    uses: X-MARIO/shared-workflows/.github/workflows/reusable-gitleaks-scan.yml@main
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-gitleaks-scan.yml@v1.0.0
     secrets: inherit

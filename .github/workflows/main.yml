@@ -8,17 +8,15 @@ on:
       - 'main'
     tags:
       - 'v*.*.*'
-  # 👇 ДОБАВЬТЕ ЭТОТ ТРИГГЕР
   workflow_dispatch:
 
 jobs:
-  # --- ЭТАП 1: ТЕСТИРОВАНИЕ ---
   tests:
     name: Build & Test
-    uses: X-MARIO/shared-workflows/.github/workflows/reusable-node-tests.yml@main
+    # 👇 Используем версионный тег вместо @main
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-node-tests.yml@v1.0.0
     secrets: inherit
 
-  # --- ЭТАП 2: СБОРКА ОБРАЗА ---
   build:
     name: Build & Push Docker Image
     needs: tests
@@ -26,15 +24,16 @@ jobs:
       contents: read
       packages: write
       security-events: write
-    uses: X-MARIO/shared-workflows/.github/workflows/reusable-docker-build.yml@main
+    # 👇 Используем версионный тег вместо @main
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-docker-build.yml@v1.0.0
     secrets: inherit
 
-  # --- ЭТАП 3: ДЕПЛОЙ В DEV ---
   deploy-dev:
     name: Deploy to Development
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: X-MARIO/shared-workflows/.github/workflows/reusable-deploy.yml@main
+    # 👇 Используем версионный тег вместо @main
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-deploy.yml@v1.0.0
     with:
       environment_name: development
       environment_url: ${{ vars.DEV_URL }}
@@ -46,12 +45,12 @@ jobs:
       remote_key: ${{ secrets.DEV_REMOTE_KEY }}
       remote_path: ${{ secrets.DEV_REMOTE_PATH }}
 
-  # --- ЭТАП 4: ДЕПЛОЙ В PROD ---
   deploy-prod:
     name: Deploy to Production
     needs: build
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    uses: X-MARIO/shared-workflows/.github/workflows/reusable-deploy.yml@main
+    # 👇 Используем версионный тег вместо @main
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-deploy.yml@v1.0.0
     with:
       environment_name: production
       environment_url: ${{ vars.PROD_URL }}
