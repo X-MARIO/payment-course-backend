@@ -1,0 +1,34 @@
+# docker-compose.prod.yml
+version: '3.9'
+
+services:
+  backend:
+    container_name: backend_prod
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+      target: production # Используем production-стадию
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.prod
+    depends_on:
+      - postgres
+    networks:
+      - app_network
+    restart: always
+
+  postgres:
+    container_name: postgres_prod
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
+    ports:
+      - "5432:5432"
+    env_file:
+      - .env.prod
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+    restart: always
