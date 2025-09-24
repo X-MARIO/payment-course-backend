@@ -26,7 +26,7 @@ async function bootstrap() {
   app.use(compression());
   // Парсит Cookie и предоставляет их в req.cookies
   app.use(cookieParser());
-  g;
+
   // Защищает от HTTP Parameter Pollution
   app.use(hpp());
 
