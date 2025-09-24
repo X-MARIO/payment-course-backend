@@ -1,22 +1,27 @@
 # .github/workflows/node-ci.yml
 
-name: Node.js CI & Security Scan (PR)
+name: Node.js CI & Security Scans (PR)
 
-# Запускается на Pull Request в ветку 'main'.
 on:
   pull_request:
     branches:
       - 'main'
 
 jobs:
-  # --- Задача 1: Запуск всех тестов через переиспользуемый воркфлоу ---
+  # --- Задача 1: Запуск всех тестов ---
   tests:
     name: Build & Test
-    uses: ./.github/workflows/reusable-node-tests.yml
+    uses: your-org/shared-workflows/.github/workflows/reusable-node-tests.yml@main
     secrets: inherit
 
-  # --- Задача 2: Запуск сканирования безопасности ---
-  security:
-    name: Security Scan
-    uses: ./.github/workflows/reusable-security-scan.yml
+  # --- Задача 2: Статический анализ кода ---
+  sast:
+    name: Security Analysis
+    uses: your-org/shared-workflows/.github/workflows/reusable-security-scan.yml@main
+    secrets: inherit
+
+  # --- Задача 3: Сканирование на наличие секретов ---
+  secrets-scan:
+    name: Gitleaks Secrets Scan
+    uses: your-org/shared-workflows/.github/workflows/reusable-gitleaks-scan.yml@main
     secrets: inherit

@@ -13,14 +13,15 @@ jobs:
   # --- ЭТАП 1: ТЕСТИРОВАНИЕ ---
   tests:
     name: Build & Test
-    uses: ./.github/workflows/reusable-node-tests.yml
+    # Вызываем воркфлоу из центрального репозитория
+    uses: your-org/shared-workflows/.github/workflows/reusable-node-tests.yml@main
     secrets: inherit
 
   # --- ЭТАП 2: СБОРКА ОБРАЗА ---
   build:
     name: Build & Push Docker Image
     needs: tests
-    uses: ./.github/workflows/reusable-docker-build.yml
+    uses: your-org/shared-workflows/.github/workflows/reusable-docker-build.yml@main
     secrets: inherit
 
   # --- ЭТАП 3: ДЕПЛОЙ В DEV ---
@@ -28,15 +29,13 @@ jobs:
     name: Deploy to Development
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: ./.github/workflows/reusable-deploy.yml
+    uses: your-org/shared-workflows/.github/workflows/reusable-deploy.yml@main
     with:
-      # Передаем параметры для dev-окружения
       environment_name: development
       environment_url: ${{ vars.DEV_URL }}
       image_tag: main
       compose_file: docker-compose.dev.yml
     secrets:
-      # Передаем секреты для dev-окружения
       remote_host: ${{ secrets.DEV_REMOTE_HOST }}
       remote_user: ${{ secrets.DEV_REMOTE_USER }}
       remote_key: ${{ secrets.DEV_REMOTE_KEY }}
@@ -47,15 +46,13 @@ jobs:
     name: Deploy to Production
     needs: build
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    uses: ./.github/workflows/reusable-deploy.yml
+    uses: your-org/shared-workflows/.github/workflows/reusable-deploy.yml@main
     with:
-      # Передаем параметры для prod-окружения
       environment_name: production
       environment_url: ${{ vars.PROD_URL }}
-      image_tag: ${{ github.ref_name }} # Используем имя тега как тег образа
+      image_tag: ${{ github.ref_name }}
       compose_file: docker-compose.prod.yml
     secrets:
-      # Передаем секреты для prod-окружения
       remote_host: ${{ secrets.PROD_REMOTE_HOST }}
       remote_user: ${{ secrets.PROD_REMOTE_USER }}
       remote_key: ${{ secrets.PROD_REMOTE_KEY }}

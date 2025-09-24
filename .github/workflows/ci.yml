@@ -1,8 +1,7 @@
 # .github/workflows/ci.yml
 
-name: Docker CI & Security Scan (PR)
+name: Docker CI & Security Scans (PR)
 
-# Запускается на Pull Request в ветку 'main'.
 on:
   pull_request:
     branches:
@@ -10,16 +9,19 @@ on:
 
 jobs:
   # --- Задача 1: Сборка и сканирование Docker-образа ---
-  # Используем тот же воркфлоу, что и в main.yml.
-  # Он умный и не будет ПУШИТЬ образ, так как запускается в контексте PR.
   build:
     name: Build & Scan Docker Image
-    uses: ./.github/workflows/reusable-docker-build.yml
+    uses: your-org/shared-workflows/.github/workflows/reusable-docker-build.yml@main
     secrets: inherit
 
-  # --- Задача 2: Запуск сканирования безопасности ---
-  # Вызываем тот же воркфлоу, что и в node-ci.yml, для унификации.
-  security:
-    name: Security Scan
-    uses: ./.github/workflows/reusable-security-scan.yml
+  # --- Задача 2: Статический анализ кода ---
+  sast:
+    name: Security Analysis
+    uses: your-org/shared-workflows/.github/workflows/reusable-security-scan.yml@main
+    secrets: inherit
+
+  # --- Задача 3: Сканирование на наличие секретов ---
+  secrets-scan:
+    name: Gitleaks Secrets Scan
+    uses: your-org/shared-workflows/.github/workflows/reusable-gitleaks-scan.yml@main
     secrets: inherit
