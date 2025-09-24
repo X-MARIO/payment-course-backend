@@ -75,24 +75,30 @@ jobs:
           head: ${{ github.sha }}
           extra_args: --only-verified
 
-  # НОВАЯ ЗАДАЧА: Дополнительный SAST-анализ с помощью Semgrep
+  # ЗАДАЧА 3: Дополнительный SAST-анализ с помощью Semgrep (ИСПРАВЛЕНА)
   semgrep-scan:
     name: Security Scan (Semgrep)
+    # Запускаем на стандартной виртуальной машине
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
+    # Указываем, что все шаги этой задачи должны выполняться внутри
+    # официального Docker-контейнера от Semgrep.
+    container:
+      image: semgrep/semgrep
+    # Пропускаем PR'ы от dependabot, чтобы избежать проблем с правами доступа.
+    if: (github.actor != 'dependabot[bot]')
+
     steps:
+      # 1. Клонируем репозиторий внутрь контейнера
       - name: Checkout repository
         uses: actions/checkout@v4
-      # Semgrep — это быстрый и очень гибкий статический анализатор,
-      # который дополняет CodeQL и находит другие типы проблем.
+
+      # 2. Запускаем команду 'semgrep ci', которая автоматически найдет
+      #    нужные правила, просканирует код и отправит отчет.
       - name: Run Semgrep
-        # ИЗМЕНЕНИЕ: Указываем полную версию для стабильности
-        uses: semgrep/semgrep-action@v2.4.0
-        with:
-          # Публикуем отчет в раздел Security на GitHub
-          publish_token: ${{ secrets.GITHUB_TOKEN }}
+        run: semgrep ci
+        env:
+          # Передаем токен из секретов GitHub для авторизации
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
   # ЗАДАЧА 4: Сборка, сканирование и публикация Docker-образа
   build-scan-and-push:
