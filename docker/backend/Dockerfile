@@ -1,5 +1,5 @@
 # Этап 1: Установка зависимостей для кэширования
-FROM node:24-alpine AS dependencies
+FROM node:22-alpine AS dependencies
 WORKDIR /usr/src/app
 COPY package.json yarn.lock ./
 RUN yarn install --frozen-lockfile
@@ -7,7 +7,7 @@ RUN yarn install --frozen-lockfile
 # ----------------------------------------------------------------
 
 # Этап 2: Сборка production-версии приложения
-FROM node:24-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /usr/src/app
 COPY --from=dependencies /usr/src/app/node_modules ./node_modules
 COPY . .
@@ -35,7 +35,7 @@ CMD ["dist/main.js"]
 # ----------------------------------------------------------------
 
 # Этап 4: Образ для разработки с hot-reload
-FROM node:24-alpine AS development
+FROM node:22-alpine AS development
 WORKDIR /usr/src/app
 
 # Создаем непривилегированного пользователя и группу
