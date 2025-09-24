@@ -24,7 +24,7 @@
     "npm:audit:fix": "npm audit fix --force",
     "docker:dev": "docker-compose -f docker-compose.yml -f docker-compose.dev.yml up --build",
     "docker:prod": "docker-compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d",
-    "docker:test:e2e": "docker-compose -f docker-compose.yml -f docker-compose.test.yml up --build --abort-on-container-exit",
+    "docker:test:e2e": "docker-compose -f docker-compose.yml -f docker-compose.test.yml up --build --abort-on-container-exit"
   },
   "dependencies": {
     "@nestjs/common": "11.1.6",

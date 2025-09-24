@@ -1,0 +1,31 @@
+# docker-compose.test.yml
+version: '3.9'
+
+services:
+  backend-test:
+    container_name: backend_test
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+      target: development
+    command: yarn test:e2e
+    env_file:
+      - .env.test
+    depends_on:
+      - postgres-test
+    networks:
+      - app_network
+
+  postgres-test:
+    container_name: postgres_test
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
+    ports:
+      - "5434:5432" # <-- Другой порт, чтобы не конфликтовать с dev
+    env_file:
+      - .env.test
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    networks:
+      - app_network

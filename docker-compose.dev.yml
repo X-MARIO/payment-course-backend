@@ -7,13 +7,13 @@ services:
     build:
       context: .
       dockerfile: docker/backend/Dockerfile
-      target: development # Указываем на development-стадию в Dockerfile
+      target: development
     volumes:
-      - .:/usr/src/app # Пробрасываем исходный код для hot-reload
-      - /usr/src/app/node_modules # Изолируем node_modules в контейнере
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
     ports:
-      - "3000:3000"
-      - "9229:9229" # Порт для дебаггера
+      - "4000:4000" # <-- Ваш порт
+      - "9229:9229"
     env_file:
       - .env.dev
     depends_on:
@@ -27,7 +27,7 @@ services:
       context: .
       dockerfile: docker/postgres/Dockerfile
     ports:
-      - "5432:5432"
+      - "5433:5432" # <-- Ваш порт
     env_file:
       - .env.dev
     volumes:

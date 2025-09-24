@@ -7,9 +7,9 @@ services:
     build:
       context: .
       dockerfile: docker/backend/Dockerfile
-      target: production # Используем production-стадию
+      target: production
     ports:
-      - "3000:3000"
+      - "4000:4000" # <-- Ваш порт
     env_file:
       - .env.prod
     depends_on:
@@ -23,8 +23,9 @@ services:
     build:
       context: .
       dockerfile: docker/postgres/Dockerfile
-    ports:
-      - "5432:5432"
+    # В production лучше не открывать порт БД наружу, если нет необходимости
+    # ports:
+    #   - "5433:5432"
     env_file:
       - .env.prod
     volumes:
