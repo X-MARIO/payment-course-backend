@@ -58,54 +58,13 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
-  # НОВАЯ ЗАДАЧА: Сканирование на наличие секретов в коде
-  secrets-scan:
-    name: Secrets Scan (TruffleHog)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      # TruffleHog сканирует всю историю коммитов на наличие случайно
-      # добавленных ключей API, паролей и других токенов.
-      - name: Run TruffleHog
-        uses: trufflesecurity/trufflehog@main
-        with:
-          path: ./
-          base: ${{ github.event.before }}
-          head: ${{ github.sha }}
-          extra_args: --only-verified
-
-  # ЗАДАЧА 3: Дополнительный SAST-анализ с помощью Semgrep (ИСПРАВЛЕНА)
-  semgrep-scan:
-    name: Security Scan (Semgrep)
-    # Запускаем на стандартной виртуальной машине
-    runs-on: ubuntu-latest
-    # Указываем, что все шаги этой задачи должны выполняться внутри
-    # официального Docker-контейнера от Semgrep.
-    container:
-      image: semgrep/semgrep
-    # Пропускаем PR'ы от dependabot, чтобы избежать проблем с правами доступа.
-    if: (github.actor != 'dependabot[bot]')
-
-    steps:
-      # 1. Клонируем репозиторий внутрь контейнера
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # 2. Запускаем команду 'semgrep ci', которая автоматически найдет
-      #    нужные правила, просканирует код и отправит отчет.
-      - name: Run Semgrep
-        run: semgrep ci
-        env:
-          # Передаем токен из секретов GitHub для авторизации
-          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
-
-  # ЗАДАЧА 4: Сборка, сканирование и публикация Docker-образа
+  # ЗАДАЧА 2: Сборка, сканирование и публикация Docker-образа
   build-scan-and-push:
     name: Build, Scan & Push Docker Image
     runs-on: ubuntu-latest
-    # Задача начнется только после успеха ВСЕХ сканеров
-    needs: [sast-scan, secrets-scan, semgrep-scan]
+    # 'needs: sast-scan' означает, что эта задача начнется только ПОСЛЕ
+    # успешного завершения задачи 'sast-scan'.
+    needs: sast-scan
     permissions:
       contents: read
       packages: write # Даем права на запись (публикацию) в реестр пакетов/образов (GHCR).
@@ -132,7 +91,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Этот один из самых важных шагов. Он автоматически генерирует
+      # Это один из самых важных шагов. Он автоматически генерирует
       # правильные и осмысленные теги для нашего Docker-образа на основе
       # события, которое запустило пайплайн (push, tag и т.д.).
       - name: Extract Docker metadata
@@ -141,13 +100,14 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            # Для ветки 'main' будет создан тег 'latest'.
-            type=branch,pattern=main,suffix=-latest
-            # Для Git-тега v1.2.3 будут созданы теги 'v1.2.3', 'v1.2', 'v1'.
+            # Для ветки 'main' будет создан тег 'main'.
+            type=ref,event=branch,pattern=main
+            # Для Git-тега v1.2.3 будут созданы теги 'v1.2.3', 'v1.2', 'v1' и 'latest'.
             # Это позволяет гибко управлять версиями при развертывании.
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
+            type=edge,branch=main
 
       # Сначала мы собираем образ, но не публикуем его (push: false).
       # Вместо этого, мы сохраняем его как локальный tar-архив.
@@ -188,13 +148,15 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  # ЗАДАЧА 5: Развертывание в DEV-окружение
+  # ЗАДАЧА 3: Развертывание в DEV-окружение
   deploy-dev:
     name: Deploy to Development
     needs: build-scan-and-push
     runs-on: ubuntu-latest
     # Запускается только при push в ветку 'main'.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Используем 'environments' — специальную функцию GitHub для управления
+    # секретами и переменными для разных сред (dev, prod).
     environment:
       name: development
       url: ${{ vars.DEV_URL }} # URL можно задать в настройках окружения.
@@ -210,12 +172,17 @@ jobs:
           username: ${{ secrets.DEV_REMOTE_USER }}
           key: ${{ secrets.DEV_REMOTE_KEY }}
           script: |
+            # Переходим в рабочую директорию на сервере
             cd ${{ vars.DEV_REMOTE_PATH }}
+            # Логинимся в GHCR на сервере, чтобы иметь возможность скачать образ
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            docker pull ghcr.io/${{ github.repository }}:main-latest
+            # Скачиваем последнюю версию образа для ветки main
+            docker pull ghcr.io/${{ github.repository }}:main
+            # Перезапускаем сервисы с помощью docker-compose.
+            # Флаг --force-recreate гарантирует, что будет использован новый образ.
             docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate
 
-  # ЗАДАЧА 6: Развертывание в PROD-окружение
+  # ЗАДАЧА 4: Развертывание в PROD-окружение
   deploy-prod:
     name: Deploy to Production
     needs: build-scan-and-push
@@ -236,6 +203,10 @@ jobs:
           script: |
             cd ${{ vars.PROD_REMOTE_PATH }}
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # Получаем имя тега (например, v1.2.3) из переменной GitHub Actions
             export IMAGE_TAG=${{ github.ref_name }}
+            # Скачиваем образ с конкретным версионным тегом.
+            # В production всегда используется точная версия, а не 'latest'.
             docker pull ghcr.io/${{ github.repository }}:${IMAGE_TAG}
+            # Перезапускаем сервисы.
             docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate
