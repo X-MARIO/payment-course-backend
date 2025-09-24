@@ -1,11 +1,10 @@
-# .github/workflows/main-ci.yml
+# .github/workflows/main.yml
 
 name: Main CI/CD
 
 # Триггеры:
 # 1. push в ветку 'main' (например, после мержа PR).
-# 2. Создание нового тега вида 'v*.*.*' (например, v1.2.3).
-
+# 2. Создание нового тега вида 'v*.*.*' (для релизов).
 on:
   push:
     branches:
@@ -14,45 +13,28 @@ on:
       - 'v*.*.*'
 
 jobs:
-  # --- Этап 1: Сборка и тесты (аналогично node-ci.yml) ---
-  build-and-test:
+  # --- Этап 1: Вызов переиспользуемого воркфлоу для тестов ---
+  # Эта задача не выполняет шаги сама, а делегирует всю работу
+  # другому файлу. Это избавляет нас от дублирования кода.
+  call-reusable-tests:
     name: Build & Test
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: testuser
-          POSTGRES_PASSWORD: testpassword
-          POSTGRES_DB: testdb
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # Используем наш готовый action для настройки.
-      - name: Setup Node.js Environment
-        uses: ./.github/actions/setup-node
-
-      # Используем наш готовый action для тестов.
-      - name: Install, Test, and Lint
-        uses: ./.github/actions/run-tests
+    # Ключевая строка: `uses` указывает на файл с воркфлоу, который нужно выполнить.
+    # Вся логика, включая запуск postgres-сервиса, теперь инкапсулирована там.
+    uses: ./.github/workflows/reusable-node-tests.yml
+    # `secrets: inherit` позволяет переиспользуемому воркфлоу иметь доступ
+    # к секретам репозитория, если они ему понадобятся.
+    secrets: inherit
 
   # --- Этап 2: Сборка, сканирование и публикация Docker-образа ---
   build-scan-and-push:
     name: Build, Scan & Push Docker Image
     runs-on: ubuntu-latest
-    # Начнется только после успешного завершения 'build-and-test'.
-    needs: build-and-test
+    # `needs` гарантирует, что эта задача начнется только ПОСЛЕ
+    # успешного завершения задачи `call-reusable-tests`.
+    needs: call-reusable-tests
     permissions:
       contents: read
-      packages: write # Права на запись в GitHub Packages/Container Registry
+      packages: write
       security-events: write
     steps:
       - name: Checkout repository
@@ -63,16 +45,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Логинимся в GitHub Container Registry, чтобы публиковать образ.
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }} # Специальный токен для аутентификации в CI
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Этот action автоматически генерирует теги для Docker-образа.
-      # Например: latest, v1.2.3, v1.2, v1.
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -84,7 +63,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
 
-      # Снова собираем образ, но на этот раз сохраняем для сканирования и последующей публикации.
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
@@ -95,7 +73,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=docker,dest=/tmp/image.tar
 
-      # Сканируем на уязвимости перед публикацией.
       - name: Scan image for vulnerabilities with Trivy
         uses: aquasecurity/trivy-action@master
         with:
@@ -105,15 +82,13 @@ jobs:
           ignore-unfixed: true
           exit-code: '1'
 
-      # Публикуем образ в GHCR.
-      # Условие 'if: github.event_name != 'pull_request'' — это защита, чтобы случайно не опубликовать образ из PR.
       - name: Push Docker image to GHCR
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./docker/backend/Dockerfile
-          push: true # Главное отличие - здесь push: true
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
@@ -122,13 +97,11 @@ jobs:
     name: Deploy to Development
     needs: build-scan-and-push
     runs-on: ubuntu-latest
-    # Запускать деплой только при push в ветку main.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment: # Указываем окружение, чтобы использовать переменные и секреты из настроек GitHub
+    environment:
       name: development
       url: ${{ vars.DEV_URL }}
     steps:
-      # Подключаемся к серверу по SSH и выполняем команды.
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -146,7 +119,6 @@ jobs:
     name: Deploy to Production
     needs: build-scan-and-push
     runs-on: ubuntu-latest
-    # Запускать деплой только при создании нового тега (релиза).
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     environment:
       name: production

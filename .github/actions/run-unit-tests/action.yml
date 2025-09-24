@@ -1,0 +1,11 @@
+# .github/actions/run-unit-tests/action.yml
+
+name: 'Run Unit Tests'
+description: 'Runs unit tests using Jest'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run unit tests
+      shell: bash
+      run: yarn test

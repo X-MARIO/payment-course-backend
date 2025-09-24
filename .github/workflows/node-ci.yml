@@ -1,73 +1,138 @@
-# .github/workflows/node-ci.yml
+# .github/workflows/main.yml
 
-name: Node.js CI & Security Scan (PR)
+name: Main CI/CD
 
+# Триггеры:
+# 1. push в ветку 'main' (например, после мержа PR).
+# 2. Создание нового тега вида 'v*.*.*' (для релизов).
 on:
-  pull_request:
+  push:
     branches:
       - 'main'
+    tags:
+      - 'v*.*.*'
 
 jobs:
-  # Первая задача: сборка и тестирование приложения.
-  build-and-test:
+  # --- Этап 1: Вызов переиспользуемого воркфлоу для тестов ---
+  # Эта задача не выполняет шаги сама, а делегирует всю работу
+  # другому файлу. Это избавляет нас от дублирования кода.
+  call-reusable-tests:
     name: Build & Test
+    # Ключевая строка: `uses` указывает на файл с воркфлоу, который нужно выполнить.
+    # Вся логика, включая запуск postgres-сервиса, теперь инкапсулирована там.
+    uses: ./.github/workflows/reusable-node-tests.yml
+    # `secrets: inherit` позволяет переиспользуемому воркфлоу иметь доступ
+    # к секретам репозитория, если они ему понадобятся.
+    secrets: inherit
+
+  # --- Этап 2: Сборка, сканирование и публикация Docker-образа ---
+  build-scan-and-push:
+    name: Build, Scan & Push Docker Image
     runs-on: ubuntu-latest
-    # Поднимаем сервис с базой данных PostgreSQL, который будет доступен для e2e-тестов.
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: testuser
-          POSTGRES_PASSWORD: testpassword
-          POSTGRES_DB: testdb
-        ports:
-          - 5432:5432 # Пробрасываем порт, чтобы приложение могло подключиться к БД.
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    steps:
-      # Шаг 1: Клонируем репозиторий, чтобы получить доступ к коду.
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # Шаг 2: Вызываем наш первый переиспользуемый action для настройки окружения.
-      - name: Setup Node.js Environment
-        uses: ./.github/actions/setup-node
-
-      # Шаг 3: Вызываем второй action для установки зависимостей и запуска тестов.
-      - name: Install, Test, and Lint
-        uses: ./.github/actions/run-tests
-
-  # Вторая задача: сканирование кода на уязвимости с помощью CodeQL.
-  security-scan:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    permissions: # Выдаем необходимые права для работы CodeQL
+    # `needs` гарантирует, что эта задача начнется только ПОСЛЕ
+    # успешного завершения задачи `call-reusable-tests`.
+    needs: call-reusable-tests
+    permissions:
       contents: read
+      packages: write
       security-events: write
-      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Инициализируем CodeQL для анализа TypeScript кода.
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          languages: typescript
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
-
-      # Запускаем анализ и отправляем результаты в GitHub Security.
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-
-      # Проверяем зависимости на наличие известных уязвимостей.
-      - name: Dependency Review
-        uses: actions/dependency-review-action@v4
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
         with:
-          # Завершить CI с ошибкой, если найдена уязвимость критического уровня.
-          fail-on-severity: critical
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch,pattern=main
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/backend/Dockerfile
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=docker,dest=/tmp/image.tar
+
+      - name: Scan image for vulnerabilities with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          input: /tmp/image.tar
+          format: 'table'
+          severity: 'HIGH,CRITICAL'
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Push Docker image to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/backend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  # --- Этап 3: Деплой на Development сервер ---
+  deploy-dev:
+    name: Deploy to Development
+    needs: build-scan-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: development
+      url: ${{ vars.DEV_URL }}
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.DEV_REMOTE_HOST }}
+          username: ${{ secrets.DEV_REMOTE_USER }}
+          key: ${{ secrets.DEV_REMOTE_KEY }}
+          script: |
+            cd ${{ vars.DEV_REMOTE_PATH }}
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker pull ghcr.io/${{ github.repository }}:main
+            docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate
+
+  # --- Этап 4: Деплой на Production сервер ---
+  deploy-prod:
+    name: Deploy to Production
+    needs: build-scan-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: production
+      url: ${{ vars.PROD_URL }}
+    steps:
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.PROD_REMOTE_HOST }}
+          username: ${{ secrets.PROD_REMOTE_USER }}
+          key: ${{ secrets.PROD_REMOTE_KEY }}
+          script: |
+            cd ${{ vars.PROD_REMOTE_PATH }}
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            export IMAGE_TAG=${{ github.ref_name }}
+            docker pull ghcr.io/${{ github.repository }}:${IMAGE_TAG}
+            docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate

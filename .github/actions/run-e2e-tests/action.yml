@@ -1,0 +1,27 @@
+# .github/actions/run-e2e-tests/action.yml
+
+name: 'Run E2E Tests'
+description: 'Creates .env file and runs end-to-end tests'
+
+runs:
+  using: "composite"
+  steps:
+    # Шаг 1: Создаем .env файл для тестов.
+    # Этот шаг необходим именно для e2e-тестов, так как они запускают
+    # полноценное приложение, которое ожидает эти переменные окружения.
+    - name: Create .env file for tests
+      shell: bash
+      run: |
+        echo "HTTP_PORT=3000" >> .env
+        echo "HTTP_HOST=http://localhost:3000" >> .env
+        echo "POSTGRES_HOST=localhost" >> .env
+        echo "POSTGRES_PORT=5432" >> .env
+        echo "POSTGRES_USER=testuser" >> .env
+        echo "POSTGRES_PASSWORD=testpassword" >> .env
+        echo "POSTGRES_DATABASE=testdb" >> .env
+        echo "NODE_ENV=test" >> .env
+
+    # Шаг 2: Запускаем e2e (end-to-end) тесты.
+    - name: Run e2e tests
+      shell: bash
+      run: yarn test:e2e
