@@ -100,14 +100,13 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            # Для ветки 'main' будет создан тег 'main'.
+            # ИСПРАВЛЕНО: Для ветки 'main' будет создан тег 'main'.
             type=ref,event=branch,pattern=main
-            # Для Git-тега v1.2.3 будут созданы теги 'v1.2.3', 'v1.2', 'v1' и 'latest'.
+            # Для Git-тега v1.2.3 будут созданы теги 'v1.2.3', 'v1.2', 'v1'.
             # Это позволяет гибко управлять версиями при развертывании.
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=edge,branch=main
 
       # Сначала мы собираем образ, но не публикуем его (push: false).
       # Вместо этого, мы сохраняем его как локальный tar-архив.
@@ -176,7 +175,7 @@ jobs:
             cd ${{ vars.DEV_REMOTE_PATH }}
             # Логинимся в GHCR на сервере, чтобы иметь возможность скачать образ
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            # Скачиваем последнюю версию образа для ветки main
+            # ИСПРАВЛЕНО: Скачиваем последнюю версию образа для ветки main с тегом 'main'
             docker pull ghcr.io/${{ github.repository }}:main
             # Перезапускаем сервисы с помощью docker-compose.
             # Флаг --force-recreate гарантирует, что будет использован новый образ.
