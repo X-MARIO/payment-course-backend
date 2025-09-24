@@ -100,8 +100,8 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            # ИСПРАВЛЕНО: Для ветки 'main' будет создан тег 'main'.
-            type=ref,event=branch,pattern=main
+            # Для ветки 'main' будет создан тег 'latest'.
+            type=branch,pattern=main,suffix=-latest
             # Для Git-тега v1.2.3 будут созданы теги 'v1.2.3', 'v1.2', 'v1'.
             # Это позволяет гибко управлять версиями при развертывании.
             type=semver,pattern={{version}}
