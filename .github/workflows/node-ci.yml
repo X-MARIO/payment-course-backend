@@ -1,0 +1,154 @@
+# Название рабочего процесса для чисто Node.js сборки и сканирования
+name: Node.js CI & Security Scan
+
+# Триггеры для запуска: push в main и pull request на main
+on:
+  push:
+    branches: ['main']
+  pull_request:
+    branches: ['main']
+
+jobs:
+  # --- ЗАДАЧА 1: Сборка и все виды тестов ---
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [22.x]
+
+    # Подключаем сервис PostgresSQL, который будет доступен для e2e-тестов
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        # Опция для проверки готовности сервиса перед запуском шагов
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      # 1. Клонирование репозитория
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Настройка Node.js
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      # 3. Включение Corepack для использования Yarn 4+
+      - name: Enable Corepack
+        run: corepack enable
+
+      # 4. Настройка кэша для Yarn (оптимизировано для Yarn 4+)
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "dir=$(yarn config get cacheFolder)" >> $GITHUB_OUTPUT
+
+      - name: Cache yarn dependencies
+        uses: actions/cache@v4
+        id: yarn-cache
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      # 5. Установка всех зависимостей
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      # 6. Создание .env файла для тестов, указывающего на сервис Postgres
+      - name: Create .env file for tests
+        run: |
+          echo "HTTP_PORT=3000" >> .env
+          echo "HTTP_HOST=http://localhost:3000" >> .env
+          echo "POSTGRES_HOST=localhost" >> .env
+          echo "POSTGRES_PORT=5432" >> .env
+          echo "POSTGRES_USER=testuser" >> .env
+          echo "POSTGRES_PASSWORD=testpassword" >> .env
+          echo "POSTGRES_DATABASE=testdb" >> .env
+          echo "NODE_ENV=test" >> .env
+
+      # 7. Запуск линтера
+      - name: Run linter
+        run: yarn lint
+
+      # 8. Запуск юнит-тестов
+      - name: Run unit tests
+        run: yarn test
+
+      # 9. Запуск e2e-тестов (с подключением к сервису Postgres)
+      - name: Run e2e tests
+        run: yarn test:e2e
+
+  # --- ЗАДАЧА 2: Проверка Production сборки ---
+  check-production-build:
+    name: Check Production Build
+    runs-on: ubuntu-latest
+    # Эта задача зависит от успешного выполнения тестов
+    needs: build-and-test
+    strategy:
+      matrix:
+        node-version: [22.x]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      # Устанавливаем ТОЛЬКО production-зависимости
+      - name: Install production dependencies
+        run: yarn install --production --immutable
+
+      # Собираем проект, чтобы убедиться, что он компилируется без dev-зависимостей
+      - name: Build project
+        run: yarn build
+
+  # --- ЗАДАЧА 3: Сканирование уязвимостей ---
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # для actions/checkout
+      security-events: write # для загрузки результатов CodeQL
+      actions: read # для dependency-review-action
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 1. Сканирование кода на уязвимости с помощью CodeQL от GitHub
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: typescript
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+      # 2. Сканирование зависимостей на уязвимости
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          # Завершать с ошибкой, если найдены уязвимости высокой или критической степени
+          fail-on-severity: critical
