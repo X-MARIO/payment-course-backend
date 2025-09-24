@@ -11,17 +11,17 @@ jobs:
   # --- Задача 1: Сборка и сканирование Docker-образа ---
   build:
     name: Build & Scan Docker Image
-    uses: your-org/shared-workflows/.github/workflows/reusable-docker-build.yml@main
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-docker-build.yml@main
     secrets: inherit
 
   # --- Задача 2: Статический анализ кода ---
   sast:
     name: Security Analysis
-    uses: your-org/shared-workflows/.github/workflows/reusable-security-scan.yml@main
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-security-scan.yml@main
     secrets: inherit
 
   # --- Задача 3: Сканирование на наличие секретов ---
   secrets-scan:
     name: Gitleaks Secrets Scan
-    uses: your-org/shared-workflows/.github/workflows/reusable-gitleaks-scan.yml@main
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-gitleaks-scan.yml@main
     secrets: inherit
