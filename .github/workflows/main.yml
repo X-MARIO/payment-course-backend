@@ -10,21 +10,21 @@ on:
       - 'v*.*.*'
 
 jobs:
-  # --- ЭТАП 1: ТЕСТИРОВАНИЕ ---
   tests:
     name: Build & Test
-    # Вызываем воркфлоу из центрального репозитория
     uses: X-MARIO/shared-workflows/.github/workflows/reusable-node-tests.yml@main
     secrets: inherit
 
-  # --- ЭТАП 2: СБОРКА ОБРАЗА ---
   build:
     name: Build & Push Docker Image
     needs: tests
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
     uses: X-MARIO/shared-workflows/.github/workflows/reusable-docker-build.yml@main
     secrets: inherit
 
-  # --- ЭТАП 3: ДЕПЛОЙ В DEV ---
   deploy-dev:
     name: Deploy to Development
     needs: build
@@ -41,7 +41,6 @@ jobs:
       remote_key: ${{ secrets.DEV_REMOTE_KEY }}
       remote_path: ${{ secrets.DEV_REMOTE_PATH }}
 
-  # --- ЭТАП 4: ДЕПЛОЙ В PROD ---
   deploy-prod:
     name: Deploy to Production
     needs: build
