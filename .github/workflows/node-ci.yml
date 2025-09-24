@@ -12,19 +12,16 @@ name: Docker CI/CD (Recommended)
 # Этот раздел определяет, какие события в репозитории будут запускать пайплайн.
 on:
   push:
-    # 1. При отправке коммитов в ветку 'develop':
-    # Это основной сценарий для непрерывной интеграции и развертывания
-    # в ваше dev-окружение.
+    # 1. При отправке коммитов в ветку 'main'.
+    # Это основной сценарий для развертывания в dev-окружение.
     branches:
-      - 'develop'
-    # 2. При создании Git-тега, который начинается с 'v' (например, v1.0.0, v1.2.3):
-    # Это стандартная практика для запуска релиза и развертывания
-    # в production-окружение.
+      - 'main'
+    # 2. При создании Git-тега, который начинается с 'v' (например, v1.0.0).
+    # Это стандартная практика для запуска релиза и развертывания в production.
     tags:
       - 'v*.*.*'
-  # 3. При создании или обновлении Pull Request'а в ветку 'main':
-  # Это позволяет прогонять тесты и проверки безопасности до слияния кода,
-  # но без этапа развертывания.
+  # 3. При создании или обновлении Pull Request'а в ветку 'main'.
+  # Это позволяет прогонять тесты и проверки до слияния кода.
   pull_request:
     branches:
       - 'main'
@@ -103,8 +100,8 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            # Для ветки 'develop' будет создан тег 'develop-latest'.
-            type=ref,event=branch,pattern=develop,suffix=-latest
+            # Для ветки 'main' будет создан тег 'main-latest'.
+            type=ref,event=branch,pattern=main,suffix=-latest
             # Для Git-тега v1.2.3 будут созданы теги 'v1.2.3', 'v1.2', 'v1'.
             # Это позволяет гибко управлять версиями при развертывании.
             type=semver,pattern={{version}}
@@ -155,8 +152,8 @@ jobs:
     name: Deploy to Development
     needs: build-scan-and-push
     runs-on: ubuntu-latest
-    # Запускается только при push в ветку 'develop'.
-    if: github.ref == 'refs/heads/develop'
+    # Запускается только при push в ветку 'main'.
+    if: github.ref == 'refs/heads/main'
     # Используем 'environments' — специальную функцию GitHub для управления
     # секретами и переменными для разных сред (dev, prod).
     environment:
@@ -178,8 +175,8 @@ jobs:
             cd ${{ vars.DEV_REMOTE_PATH }}
             # Логинимся в GHCR на сервере, чтобы иметь возможность скачать образ
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            # Скачиваем последнюю версию образа для ветки develop
-            docker pull ghcr.io/${{ github.repository }}:develop-latest
+            # Скачиваем последнюю версию образа для ветки main
+            docker pull ghcr.io/${{ github.repository }}:main-latest
             # Перезапускаем сервисы с помощью docker-compose.
             # Флаг --force-recreate гарантирует, что будет использован новый образ.
             docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate
