@@ -12,7 +12,7 @@ jobs:
   # --- ЭТАП 1: ТЕСТИРОВАНИЕ ---
   tests:
     name: Build & Test
-    uses: X-MARIO/shared-workflows/.github/workflows/reusable-node-tests.yml@main
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-node-tests.yml@${{ vars.SHARED_WORKFLOWS_VERSION }}
     with:
       shared-workflows-version: ${{ vars.SHARED_WORKFLOWS_VERSION }}
     secrets: inherit
@@ -25,7 +25,7 @@ jobs:
       contents: read
       packages: write
       security-events: write
-    uses: X-MARIO/shared-workflows/.github/workflows/reusable-docker-build.yml@main
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-docker-build.yml@${{ vars.SHARED_WORKFLOWS_VERSION }}
     with:
       shared-workflows-version: ${{ vars.SHARED_WORKFLOWS_VERSION }}
     secrets: inherit
@@ -35,7 +35,7 @@ jobs:
     name: Deploy to Development
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: X-MARIO/shared-workflows/.github/workflows/reusable-deploy.yml@main
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-deploy.yml@${{ vars.SHARED_WORKFLOWS_VERSION }}
     with:
       environment-name: development
       environment-url: ${{ vars.DEV_URL }}
@@ -53,7 +53,7 @@ jobs:
     name: Deploy to Production
     needs: build
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    uses: X-MARIO/shared-workflows/.github/workflows/reusable-deploy.yml@main
+    uses: X-MARIO/shared-workflows/.github/workflows/reusable-deploy.yml@${{ vars.SHARED_WORKFLOWS_VERSION }}
     with:
       environment-name: production
       environment-url: ${{ vars.PROD_URL }}
